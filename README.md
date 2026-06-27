@@ -59,7 +59,13 @@ A thinking partner for new concepts. It:
 Reusable, composable modules that any agent or flow can call. Think of these as institutional knowledge encoded into procedures.
 
 ### Presentation Hook
-Every time information is returned to you, it's formatted for understanding — not just correctness. Uses diagrams where structure helps, uses summaries before detail, never leads with raw data.
+Agents don't render UI. They return structured JSON. The rendering layer — built in code — handles charts, tables, digests, and dashboards from that JSON contract.
+
+This is a hard separation: the agent's job is to produce the right data in the right shape, fast. The code's job is to make it look good. Neither does the other's work.
+
+Every agent that produces displayable output declares an **output schema** — a typed JSON contract for its response. The rendering layer consumes that schema and renders the appropriate component: chart, card, digest, table, status panel. Add a new visualisation once in code; every agent that matches the schema gets it for free.
+
+The agent spends zero tokens on formatting, layout, or presentation logic. It returns clean data and stops.
 
 ### GitHub Commit Skill
 Commits happen automatically — no prompting, no interruption. The skill detects natural checkpoints and acts:
@@ -150,7 +156,27 @@ Zero friction from "I want to work on X" to actually working on X.
 ### Test Suite (Default On)
 Every project ships with tests. Not optional. The coding agent writes them alongside the implementation. Coverage is reported. Tests run on every commit.
 
-### Agent Instructions Directory
+### Hybrid Execution Model
+The fundamental principle governing how the system is built: **agents do what only agents can do. Code does everything else.**
+
+Agents are slow, expensive, and non-deterministic. They're also the only thing that can reason, synthesise, and make judgement calls. Code is fast, cheap, and reliable. The system should maximise code and minimise agent where the task doesn't require reasoning.
+
+The pattern is **code → agent → code**:
+
+- **Pre-agent code** — fetch data, validate inputs, transform to the shape the agent expects, apply known filters. The agent receives clean, minimal context — not raw noise.
+- **Agent** — reasons over that context, makes decisions, produces structured JSON output. It does not fetch, transform, format, or render.
+- **Post-agent code** — validates the JSON schema, routes to the right renderer, writes to storage, triggers downstream actions, handles errors. The agent's output is a data contract, not a finished product.
+
+In practice this means:
+- Data collection is always code (APIs, DB queries, file reads)
+- Parsing and normalisation is always code
+- Reasoning, summarisation, prioritisation, and classification is agent
+- Rendering, charting, formatting is always code
+- Storage writes and downstream triggers are always code
+
+Where a task can be solved deterministically — regex, sorting, filtering, aggregation — it never touches the agent. The agent is reserved for the problems only it can solve. This also makes the system more testable: code layers have unit tests; agent outputs are validated against their JSON schema before anything downstream runs.
+
+---
 A single source of truth for every agent's configuration. Not just a folder of prompts — a living registry with:
 
 - The current system prompt for each agent
@@ -201,6 +227,23 @@ The feedback loop then closes naturally:
 
 Without the eval spec, improvement is guesswork. With it, the system knows when it's getting better and why.
 
+```mermaid
+flowchart TD
+    IE["Improvement engine\nProposes instruction changes"]
+    A["Agent\nRuns task, returns structured JSON"]
+    FE["Failure engine\nScores against eval spec, attributes root cause"]
+    J["Judge\nPass / fail"]
+    FA["Final assessment\nLog result, trigger next cycle"]
+
+    IE -->|approved change| A
+    A -->|output| FE
+    FE -->|result| J
+    J --> FA
+    FA -.->|pass → next run| A
+    FE -.->|root cause| IE
+    A -.->|proposes fix| IE
+```
+
 ---
 
 ## Open Questions
@@ -216,6 +259,8 @@ Without the eval spec, improvement is guesswork. With it, the system knows when 
 - What tool generates the wireframes in Phase 2 of the Coding Agent — inline SVG, a dedicated design tool, or something Claude renders directly?
 - How granular should eval specs be — per agent, per task type, or per individual run case?
 - Who writes the first eval spec for a new agent — the Ultimate Agent Builder, or does it require human input to define what "good" looks like?
+- Where does the JSON output schema registry live — alongside the Agent Instructions Directory, or co-located with the rendering layer code?
+- How do you handle agent output that partially conforms to schema — strict reject, or partial render with flagged fields?
 
 ---
 
