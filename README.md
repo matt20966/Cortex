@@ -1,129 +1,234 @@
-# Cortex
-A all in one platform for managing workflows, agents and thoughts
+# From Using AI → Having a Team of AI
 
-# From Using AI to Having a Team of AI
-
-Most people use AI the same way they use Google — ask a question, get an answer, move on. This project is about something different: replacing repetitive mental overhead with a network of specialised agents that run autonomously, collaborate, and escalate to you only when they genuinely need your input.
-
-The shift isn't from no-AI to AI. It's from *you prompting AI* to *AI working for you*.
+**Core premise:** Stop prompting Claude for one-off tasks. Build a system where agents, skills, and automation work together — producing higher quality output, more autonomously, with less friction.
 
 ---
 
-## What this is
+## The Vision
 
-A personal agent ecosystem built around the things I actually do every day — coding, research, planning, and shipping. Each agent has a narrow job and does it well. They share context, hand off to each other, and know when to ask a question rather than guess.
+Most people use AI the way they use a search engine — one question, one answer, one session. The goal here is different: a personal AI infrastructure where specialised agents handle recurring work, skills encode hard-won best practices, and the whole system compounds in capability over time.
 
-The goal is a setup where I can dump a rough idea, answer a handful of questions, and come back to a working project with tests, documentation, and a commit history that explains every decision.
+**Three principles driving everything:**
+- **Autonomy** — agents act without being asked when the trigger is right
+- **Quality** — every output is checked, tested, and grounded in context
+- **Memory** — decisions, design choices, and project history persist and inform future work
 
 ---
 
 ## Agents
 
-### Daily Brief
-Pulls together what matters before the day starts — open PRs, research threads, outstanding tasks, anything flagged from the day before. One digest, no hunting.
+Discrete, purpose-built agents that either run on a schedule, respond to hooks, or are invoked by name.
+
+### Daily Report Agent
+Runs every morning. Pulls together:
+- Open tasks and priorities
+- Outstanding questions/blockers
+- Any overnight updates (GitHub, calendar, messages)
+- A recommended focus for the day
+
+Delivers a short, skimmable digest — not a wall of text.
 
 ### Coding Agent
-Handles new features and fixes from a description. Scaffolds the project, writes the code, writes the tests, and commits with a proper message. Asks questions up front when the spec is ambiguous rather than building the wrong thing.
+Invoked when starting something new. Critically, it doesn't write a single line of code until the project is fully understood and visualised. Three mandatory phases before any implementation:
 
-### Research Agent  
-Given a topic or question, it goes deep — sources, synthesis, contradictions, open questions. Returns something you can actually act on, not a list of links.
+**Phase 1 — Interrogation.** Asks every question it needs upfront: stack, constraints, audience, success criteria, known edge cases, integrations. Nothing ambiguous survives this phase.
 
-### Idea Validator
-Takes a rough idea and pressure-tests it. What's the assumption? What breaks it? What already exists? Useful before spending time building something that doesn't hold up.
+**Phase 2 — Visual brief.** Produces wireframes or mockups of the UI before building it. What it looks like in your head gets externalised and agreed on here — not discovered halfway through implementation. Layouts, flows, key screens. You approve or redirect before any code exists.
 
----
+**Phase 3 — Exhaustive plan.** A full build plan including: component breakdown, data model, file structure, third-party dependencies, potential complexity spikes, and a ranked improvement backlog generated upfront — not squeezed out over time. The backlog is written into project memory immediately so nothing gets lost to future sessions.
 
-## Skills (reusable across agents)
+Only then does it build — scaffolding, implementation, test suite, auto-commits, start hook. The plan is the contract; the code fulfils it.
 
-**Presentation hook** — a consistent way to surface information that's easy to scan. Agents don't dump walls of text; they format output for how you're going to use it.
+### Research Agent
+Given a topic or question, it:
+- Searches and synthesises sources
+- Proof-checks claims and flags weak assumptions
+- Surfaces counterarguments
+- Returns a structured brief, not a brain dump
 
-**Diagram builder** — whenever something needs explaining, it produces a diagram. Architecture, flows, data models, decision trees. Visual first, prose second.
-
-**Commit writer** — every code change gets a meaningful commit message. Conventional format, enough context that future-you understands why, not just what. Commits happen regularly, not in one giant dump at the end.
-
-**Question protocol** — before starting any task where the brief is unclear, the agent asks. One focused question at a time, not a form to fill out. If it can make a reasonable assumption, it says so and proceeds.
-
-**Project memory** — every project keeps a running log of design decisions, architecture choices, and what was tried and rejected. When you come back to something after three weeks, context is there.
-
-**Idea inbox** — paste in a message thread, a voice note transcript, a jumble of notes. The agent structures it into a plan with open questions surfaced for you to answer.
-
-**Test suite scaffolding** — every coding project gets a test suite. Not as an afterthought. Set up before the main code is written.
+### Ideas & Validation Agent
+A thinking partner for new concepts. It:
+- Challenges the idea — looks for holes, edge cases, prior art
+- Asks "what would have to be true for this to work?"
+- Returns a verdict: strong / needs refinement / already exists / worth prototyping
 
 ---
 
-## How flows are managed
+## Skills
 
-Agents don't run in isolation. There's a layer above them that routes work, tracks what's in progress, and handles handoffs — so the research agent can feed into the coding agent without you being the middleman.
+Reusable, composable modules that any agent or flow can call. Think of these as institutional knowledge encoded into procedures.
 
-One workspace connects to others. Context isn't siloed per session; the right information is available wherever it's needed.
+### Presentation Hook
+Every time information is returned to you, it's formatted for understanding — not just correctness. Uses diagrams where structure helps, uses summaries before detail, never leads with raw data.
 
----
+### GitHub Commit Skill
+Commits happen automatically — no prompting, no interruption. The skill detects natural checkpoints and acts:
+- A feature or function reaches a working state
+- Tests pass after a fix
+- A refactor completes without breaking anything
+- A config or scaffold is laid down before real work begins
 
-## The fully autonomous build flow
+At each checkpoint it writes the commit message itself — describing *why* the change was made, not just *what* changed — in conventional commits format, then pushes. The history builds in the background while you stay in flow.
 
-The closest thing to the end goal: describe what you want to build, answer a short set of clarifying questions, and step away. The system:
+### Diagram Builder
+When explaining something complex — an architecture, a flow, a decision — it builds a diagram. Not as an afterthought, but as the primary explanation. Text follows the visual.
 
-- Structures the idea
-- Makes design decisions (documenting each one)
-- Scaffolds the project
-- Writes the code and tests
-- Opens the project in the browser
-- Commits at meaningful checkpoints
+### Clarification Protocol
+When an agent needs more information to proceed, it doesn't guess or make assumptions. It surfaces exactly the questions it needs answered, waits for input, then continues. No unnecessary interruptions — only when genuinely blocked.
 
-You intervene when it genuinely needs a decision that only you can make. Not before.
+### Pain Points & Hurdles Skill
+Every project accumulates blockers, unknowns, and things that are harder than expected. This skill tracks them and actively works to resolve them.
 
----
+When invoked (or on a schedule), it:
+- Pulls the project's current pain points log from project memory
+- Reads the relevant context — stack, architecture decisions, what's already been tried
+- Runs targeted research on each open hurdle
+- Returns a brief per pain point: root cause, recommended fix, relevant prior art or examples
 
-## Project structure
-
-```
-/agents
-  daily-brief/
-  coding/
-  research/
-  validator/
-
-/skills
-  presentation/
-  diagrams/
-  commit-writer/
-  question-protocol/
-  project-memory/
-  idea-inbox/
-  test-scaffolding/
-
-/orchestration
-  flow-manager/
-  workspace-bridge/
-
-/hooks
-  start          # opens the relevant workspace and surfaces today's context
-```
+Pain points are written into project memory when they're discovered (by the coding agent, during a session, or manually flagged). Resolved ones are marked with how they were solved — so the same wall doesn't get hit twice.
 
 ---
 
-## Principles
+## Memory & Context
 
-**Narrow agents over general ones.** A focused agent that does one thing well is more reliable and easier to improve than one that tries to do everything.
+### Project Memory
+Every project has a living document:
+- What it is and why it was built
+- Every significant design decision and the reasoning behind it
+- What was tried and abandoned, and why
+- Current state and open questions
+- **Active pain points and hurdles** — with status (open / in progress / resolved) and resolution notes
 
-**Questions over assumptions.** When context is missing, ask. One question, clearly framed. Never guess on something that changes the output meaningfully.
+Agents read this before acting on a project. Updates are written back automatically after meaningful changes.
 
-**Memory is part of the system.** Decisions don't live in someone's head or buried in a chat history. They're logged, structured, and retrievable.
+### Idea Dump → Plan
+A raw input mode: paste a block of messages, notes, or voice transcript. The system:
+- Extracts the core idea
+- Identifies assumptions
+- Asks clarifying questions if needed
+- Returns a structured plan with next steps
 
-**Commits are documentation.** The git history should explain the project as well as any README. Regular, meaningful commits over infrequent bulk ones.
+### Project Links
+Projects don't exist in isolation — learnings from one should inform the next. Each project can declare links to others, and those links are typed:
 
-**Diagrams are first-class.** If something is complex enough to need explaining, it's complex enough to need a diagram.
+- **Learned from** — this project applied a pattern or solved a problem discovered in another
+- **Shares context with** — same domain, stack, or user — decisions here are likely relevant there
+- **Depends on** — one project's output is another's input (shared libraries, APIs, data)
+- **Supersedes** — this is the evolved version of an earlier attempt
+
+When an agent opens a project, it reads not just that project's memory but the linked lessons — pain points resolved elsewhere, design choices that didn't work, approaches that did. Knowledge compounds across the portfolio rather than resetting with each new repo.
+
+### Key Contacts
+A lightweight CRM. For each contact: who they are, what you've discussed, what's outstanding. Agents reference this when drafting messages or planning outreach.
 
 ---
 
-## Status
+## Infrastructure
 
-Early build. Agents and skills are being developed and connected incrementally. The orchestration layer is the current focus.
+### Multi-Flow Manager
+A way of tracking and switching between parallel workstreams — multiple projects, research threads, or ideas in flight at once. Each flow has its own context, memory, and agent state.
+
+### Connected Codespaces
+One workspace that knows about others. If a project depends on a shared library, the agent knows about both. Changes propagate. No context lost when jumping between repos.
+
+### Auto-Build Mode
+Given a brief, the coding agent builds the full project with minimal interruption:
+- Front-loads all questions at the start
+- Makes reasonable default decisions autonomously
+- Only pauses when it hits a genuine fork it can't resolve alone
+- Delivers a working, tested, committed project
+
+### Start Hook
+Every coding project has a single command that:
+- Starts all required services
+- Opens the browser to the right URL
+- Loads the project memory
+- Surfaces any outstanding tasks or blockers
+
+Zero friction from "I want to work on X" to actually working on X.
+
+### Test Suite (Default On)
+Every project ships with tests. Not optional. The coding agent writes them alongside the implementation. Coverage is reported. Tests run on every commit.
+
+### Agent Instructions Directory
+A single source of truth for every agent's configuration. Not just a folder of prompts — a living registry with:
+
+- The current system prompt for each agent
+- A **changelog** — every meaningful edit, why it was made, and what behaviour it changed
+- **Decision log** — why certain instructions exist, so future changes are made with context not against it
+- **Overlap detection** — flags when two agents share substantial instruction surface, surfacing candidates for extraction into a shared skill or base prompt
+- **Composition** — instead of duplicating common blocks (tone, clarification protocol, output format), agents inherit from shared instruction modules and only define what's unique to them
+
+The directory is versioned. Rolling back an agent to a previous behaviour is a one-line change.
+
+### Ultimate Agent Builder
+A meta-agent that handles the design and creation of new agents and skills. Before writing anything, it audits what already exists:
+
+- Reads the Agent Instructions Directory to understand every current agent's remit
+- Reads the Skills registry to understand what's reusable
+- Assesses whether the request needs a **new agent**, an **extension to an existing one**, a **new skill**, or a **combination of existing parts**
+- Flags if a database or persistent store is needed — and suggests the right shape (key-value, relational, vector, or flat file) based on what the agent will actually do
+- If building new: generates the instruction set, wires in relevant shared modules, writes it into the directory with an initial changelog entry
+- If extending: diffs the proposed change against the existing instruction, updates the changelog, checks for new overlaps
+
+It asks clarifying questions before building, not during. Delivers a working agent spec, not a rough draft.
+
+### Agent Self-Improvement Loop
+Agents don't stay static. Each agent can observe its own performance and propose improvements:
+
+- After a set number of runs (or on a schedule), the agent reviews a sample of its own outputs against a simple rubric — did it answer the right question? was the output the right shape? did it get stuck unnecessarily?
+- It drafts a proposed instruction change and writes it to the Agent Instructions Directory as a **pending change** — not applied automatically
+- The Ultimate Agent Builder reviews the proposal: checks for regressions, conflicts with other agents, and whether the change belongs in a shared skill instead
+- Approved changes are applied and logged; rejected ones are kept with a reason so the loop learns what kinds of proposals don't land
+
+### Agent Evaluation Framework
+The root cause of "have to reask for improvements" and "no way of knowing if an agent is working" — both solved the same way: define what good looks like before the agent runs for the first time, then measure against it automatically.
+
+Every agent has an **eval spec** written at creation time (by the Ultimate Agent Builder) containing:
+
+- **Target** — what a successful run looks like in concrete, measurable terms. Not "gives a good answer" but "identifies all blockers", "produces a valid JSON schema", "completes without clarification for well-formed inputs"
+- **Failure modes** — the named ways an agent can underperform, each with a detection heuristic. E.g. "hallucinated a file path", "asked a question it should have answered from context", "output format didn't match spec"
+- **Scoring rubric** — a lightweight pass/fail or scored checklist run after each output. Automated where possible; flagged for human review where not
+- **Failure attribution** — when a run scores below threshold, the framework produces a root cause: was it the instruction? the context it was given? the model? an edge case the spec didn't cover? This becomes the input to the self-improvement loop
+
+The feedback loop then closes naturally:
+
+1. Agent runs → output scored against eval spec
+2. Below threshold → failure attributed to a root cause
+3. Root cause logged as a pending improvement in the Agent Instructions Directory
+4. Ultimate Agent Builder reviews and applies or rejects the change
+5. Agent reruns the failed case — did the fix work?
+
+Without the eval spec, improvement is guesswork. With it, the system knows when it's getting better and why.
 
 ---
 
-## Why
+## Open Questions
 
-Using AI well takes effort — good prompts, the right context, knowing what to ask. That effort compounds if you're doing it dozens of times a day. The point of this project is to front-load that effort into the system once, so the day-to-day overhead drops close to zero.
+- What's the right orchestration layer — Claude Code, a custom Node runner, something else?
+- How does project memory get stored and versioned? (Git-tracked markdown vs. structured DB)
+- Which agents run on a schedule vs. on-demand vs. triggered by events?
+- How do agents hand off to each other cleanly without losing context?
+- What's the MVP — the smallest slice that proves the concept works?
+- How are project links surfaced to agents — injected into context at session start, or fetched on demand?
+- What's the approval flow for self-improvement proposals — a dedicated review UI, or inline in the daily report?
+- How do you prevent instruction drift across agents over many improvement cycles — is there a canonical "floor" that can't be changed without manual override?
+- What tool generates the wireframes in Phase 2 of the Coding Agent — inline SVG, a dedicated design tool, or something Claude renders directly?
+- How granular should eval specs be — per agent, per task type, or per individual run case?
+- Who writes the first eval spec for a new agent — the Ultimate Agent Builder, or does it require human input to define what "good" looks like?
 
-Less time managing AI. More time on the work that actually needs you.
+---
+
+## Possible First Build
+
+A single loop that proves the architecture:
+
+1. Dump a rough idea into the system
+2. Clarification agent asks its questions
+3. Coding agent scaffolds and builds
+4. Test suite runs
+5. Commit skill writes and pushes
+6. Project memory is initialised
+7. Daily report agent knows about the new project tomorrow morning
+
+That's the flywheel. Once it runs end-to-end, everything else is an extension.
