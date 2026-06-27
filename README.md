@@ -150,11 +150,26 @@ Every coding project has a single command that:
 - Opens the browser to the right URL
 - Loads the project memory
 - Surfaces any outstanding tasks or blockers
+- Watches for file changes and restarts the relevant service automatically — so changes show in the browser without any manual step
+
+The watcher is selective: a change to a frontend component triggers a hot reload; a change to a server file restarts the server process and refreshes the browser; a change to a config or environment file restarts the full stack. No stale state, no "why isn't my change showing up" — the site always reflects what's on disk.
 
 Zero friction from "I want to work on X" to actually working on X.
 
 ### Test Suite (Default On)
 Every project ships with tests. Not optional. The coding agent writes them alongside the implementation. Coverage is reported. Tests run on every commit.
+
+### Daily Sign-off Task
+A scheduled task that runs at end of day — the system's way of closing out a working session properly.
+
+Sequence:
+1. Runs the full test suite against the current working state
+2. If all tests pass: writes a daily commit summarising what changed during the session, pushes to remote
+3. If any tests fail: does not commit — surfaces a summary of what broke and why before anything gets pushed
+4. Updates project memory with the day's progress: what was completed, what's in progress, what's blocked
+5. Writes a brief to the Daily Report Agent so tomorrow morning's digest already knows where things stand
+
+The commit message is generated automatically — a concise summary of the session's changes in conventional commits format, not a placeholder. Nothing gets pushed in a broken state. Nothing gets lost to an unsaved session.
 
 ### Hybrid Execution Model
 The fundamental principle governing how the system is built: **agents do what only agents can do. Code does everything else.**
@@ -177,25 +192,49 @@ In practice this means:
 Where a task can be solved deterministically — regex, sorting, filtering, aggregation — it never touches the agent. The agent is reserved for the problems only it can solve. This also makes the system more testable: code layers have unit tests; agent outputs are validated against their JSON schema before anything downstream runs.
 
 ---
-A single source of truth for every agent's configuration. Not just a folder of prompts — a living registry with:
 
-- The current system prompt for each agent
-- A **changelog** — every meaningful edit, why it was made, and what behaviour it changed
-- **Decision log** — why certain instructions exist, so future changes are made with context not against it
-- **Overlap detection** — flags when two agents share substantial instruction surface, surfacing candidates for extraction into a shared skill or base prompt
-- **Composition** — instead of duplicating common blocks (tone, clarification protocol, output format), agents inherit from shared instruction modules and only define what's unique to them
+### Agent Instructions Directory
+The registry where every agent lives — not just their current instructions, but their full history, rationale, and relationship to every other agent and skill in the system.
+
+Each agent entry contains:
+- **Name** — following a consistent naming convention (verb-noun or domain-role, e.g. `research-synthesiser`, `code-reviewer`, `daily-reporter`)
+- **Description** — one sentence on what the agent does, one on what it explicitly doesn't do (the boundary matters as much as the scope)
+- **Instructions** — the current system prompt, composed from shared skill modules plus agent-specific logic
+- **Changelog** — every meaningful change to this agent, when it was made, why, and what behaviour it altered
 
 The directory is versioned. Rolling back an agent to a previous behaviour is a one-line change.
 
-### Ultimate Agent Builder
-A meta-agent that handles the design and creation of new agents and skills. Before writing anything, it audits what already exists:
+---
 
-- Reads the Agent Instructions Directory to understand every current agent's remit
-- Reads the Skills registry to understand what's reusable
-- Assesses whether the request needs a **new agent**, an **extension to an existing one**, a **new skill**, or a **combination of existing parts**
-- Flags if a database or persistent store is needed — and suggests the right shape (key-value, relational, vector, or flat file) based on what the agent will actually do
-- If building new: generates the instruction set, wires in relevant shared modules, writes it into the directory with an initial changelog entry
-- If extending: diffs the proposed change against the existing instruction, updates the changelog, checks for new overlaps
+### Agent Directory Skill
+A skill that keeps the directory clean, organised, and non-redundant. It runs in two modes:
+
+**Maintenance mode** — periodically audits the full directory and produces a report covering:
+- **Overlap candidates** — pairs or groups of agents with substantially similar instruction surface. Flags them with a recommended action: merge into one agent, extract the shared logic into a skill, or keep separate with a clearer boundary
+- **Skill extraction candidates** — instruction blocks that appear in multiple agents and belong in a reusable skill instead
+- **Grouping** — agents clustered by domain or function (e.g. dev tools, research, reporting, meta/system), with recommendations for folder structure or tagging
+- **Naming audit** — agents whose names are ambiguous, inconsistent with the convention, or too similar to another agent's name
+
+**Creation mode** — invoked whenever a new agent is being built. This is the gate before any instructions are written:
+
+1. Reads every existing agent's name, description, and instruction summary
+2. Reads every existing skill
+3. Identifies the closest existing agents — what they already cover, where they fall short
+4. Makes a recommendation: **new agent**, **extend an existing one**, **new skill only**, or **combine two existing agents**
+5. If proceeding with a new agent: determines which existing skills can be composed in rather than rewritten, identifies what genuinely needs to be written from scratch
+6. Writes the agent entry — name (checked against naming convention), description (scoped tightly), instructions (referencing shared skills, not duplicating them)
+7. Initialises the changelog with entry `v0.1 — created. Rationale: [why this agent exists and why existing agents don't cover it]`
+
+Nothing gets added to the directory without passing through this skill. The result is a registry that stays legible as it grows rather than becoming a graveyard of overlapping, ambiguously named prompts.
+
+### Ultimate Agent Builder
+A meta-agent that handles the design and creation of new agents. It orchestrates the Agent Directory Skill's creation mode, then goes further:
+
+- Invokes the Agent Directory Skill to audit what already exists and get a recommendation before anything is written
+- If the recommendation is to proceed: takes the pre-checked name, description, and instruction scaffold from the skill and builds out the full implementation
+- Assesses whether a database or persistent store is needed — and suggests the right shape (key-value, relational, vector, or flat file) based on what the agent will actually do
+- Writes the eval spec alongside the instructions — target, failure modes, scoring rubric — so the agent is testable from its first run
+- If extending an existing agent: diffs the proposed change against current instructions, updates the changelog, re-runs the overlap check to see if the change creates new duplication
 
 It asks clarifying questions before building, not during. Delivers a working agent spec, not a rough draft.
 
