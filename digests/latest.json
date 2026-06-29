@@ -1,0 +1,24 @@
+{
+  "schema_type": "daily-digest",
+  "assembled_at": "2026-06-29T20:48:03.909Z",
+  "date": "2026-06-29",
+  "focus": "Review inbox and open blockers",
+  "priorities": [],
+  "blockers": [],
+  "inbox_pending": 0,
+  "queue_pending": 0,
+  "new_ideas": [
+    {
+      "id": "idea-001",
+      "content": "Build the MVP flywheel: idea capture → validation → memory → daily report",
+      "verdict": "build"
+    },
+    {
+      "id": "idea-002",
+      "content": "What if cortex auto-routes inbox items to the right agent without manual invocation?",
+      "verdict": "validate"
+    }
+  ],
+  "overnight_activity": "20 agent run(s) since yesterday",
+  "agent_invocation": "Run daily-reporter for today's digest"
+}

@@ -1,0 +1,13 @@
+{
+  "target": "Produces skimmable daily digest with focus, priorities, and blockers",
+  "failure_modes": [
+    { "id": "missing-focus", "heuristic": "focus field empty" },
+    { "id": "wall-of-text", "heuristic": "focus longer than 200 characters" }
+  ],
+  "rubric": [
+    "focus_is_one_line",
+    "priorities_actionable",
+    "blockers_from_memory",
+    "inbox_count_accurate"
+  ]
+}

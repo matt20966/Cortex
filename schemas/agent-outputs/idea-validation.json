@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cortex.local/schemas/agent-outputs/idea-validation.json",
+  "type": "object",
+  "required": ["verdict", "summary", "recommendation"],
+  "additionalProperties": true,
+  "properties": {
+    "verdict": { "type": "string", "enum": ["build", "validate", "kill"] },
+    "pain_point": { "type": "object" },
+    "dream_scenario": { "type": "object" },
+    "reach": { "type": "object" },
+    "stress_test": { "type": "object" },
+    "summary": { "type": "string", "minLength": 1 },
+    "recommendation": { "type": "string", "minLength": 1 }
+  }
+}

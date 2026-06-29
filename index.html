@@ -214,6 +214,16 @@
 
                     <div class="daily-notes-section memory-digest-section">
                         <h3>
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 2v4"></path><path d="M12 18v4"></path><path d="M4.93 4.93l2.83 2.83"></path></svg>
+                            Morning Digest
+                        </h3>
+                        <div id="daily-report-agent-digest" class="memory-digest-container">
+                            <p class="text-muted">Loading digest...</p>
+                        </div>
+                    </div>
+
+                    <div class="daily-notes-section memory-digest-section">
+                        <h3>
                             <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 2a10 10 0 1 0 10 10"></path><path d="M12 6v6l4 2"></path></svg>
                             Project Memory Digest
                         </h3>
@@ -262,60 +272,16 @@
                 <div class="agent-runner-container">
                     <div class="daily-header-bar">
                         <div class="daily-title-area">
-                            <h2>Autonomous Agent Runner</h2>
-                            <p>Configure, trigger, and monitor AI background agents to automate your workflow tasks.</p>
+                            <h2>Agent Runner</h2>
+                            <p id="agent-queue-summary">Agents run in Cursor — copy invocation prompts from here.</p>
                         </div>
-                        <button id="btn-run-custom-agent" class="btn btn-primary">
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            <span>Trigger Workspace Synthesis</span>
+                        <button id="btn-process-queue" class="btn btn-primary" type="button">
+                            <span>Process next queued item</span>
                         </button>
                     </div>
 
-                    <div class="agents-grid">
-                        <div class="agent-card">
-                            <div class="agent-card-header">
-                                <div class="agent-title-group">
-                                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                                    <h3 class="agent-card-title">Task Prioritizer</h3>
-                                </div>
-                                <span class="agent-status-badge idle" id="status-agent-1">Idle</span>
-                            </div>
-                            <p class="agent-card-desc">Automatically inspects overdue tasks, evaluates impact against active projects, and adjusts priority flags.</p>
-                            <div class="agent-card-footer">
-                                <span class="agent-model-tag">Claude 3.5 Sonnet</span>
-                                <button class="btn btn-secondary btn-run-agent-instance" data-agent="1">Run Agent</button>
-                            </div>
-                        </div>
-
-                        <div class="agent-card">
-                            <div class="agent-card-header">
-                                <div class="agent-title-group">
-                                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="color: #10b981;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-                                    <h3 class="agent-card-title">Deep Research Scraper</h3>
-                                </div>
-                                <span class="agent-status-badge idle" id="status-agent-2">Idle</span>
-                            </div>
-                            <p class="agent-card-desc">Crawls external documentation, aggregates course links, and appends summarized knowledge directly to Skills Folders.</p>
-                            <div class="agent-card-footer">
-                                <span class="agent-model-tag">GPT-4o</span>
-                                <button class="btn btn-secondary btn-run-agent-instance" data-agent="2">Run Agent</button>
-                            </div>
-                        </div>
-
-                        <div class="agent-card">
-                            <div class="agent-card-header">
-                                <div class="agent-title-group">
-                                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="color: #f59e0b;"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path></svg>
-                                    <h3 class="agent-card-title">Refactor & Cleanup</h3>
-                                </div>
-                                <span class="agent-status-badge idle" id="status-agent-3">Idle</span>
-                            </div>
-                            <p class="agent-card-desc">Evaluates completed task trees, removes redundant local storage records, and formats executive summary reports.</p>
-                            <div class="agent-card-footer">
-                                <span class="agent-model-tag">Gemini 1.5 Pro</span>
-                                <button class="btn btn-secondary btn-run-agent-instance" data-agent="3">Run Agent</button>
-                            </div>
-                        </div>
+                    <div class="agents-grid" id="agents-grid-container">
+                        <p class="text-muted">Loading agents from registry...</p>
                     </div>
 
                     <div class="agent-console-section">
@@ -511,6 +477,7 @@
         </div>
     </div>
 
+    <script src="renderers.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

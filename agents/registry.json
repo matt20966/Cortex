@@ -1,0 +1,59 @@
+{
+  "agents": [
+    {
+      "id": "idea-creator-validator",
+      "name": "Idea Creator & Validator",
+      "description": "Structured four-lens validation for raw ideas. Does not write code.",
+      "model_tier": "mid",
+      "trigger": "on_demand",
+      "output_schema": "idea-validation",
+      "skills": ["presentation-hook", "clarification-protocol", "project-memory"],
+      "mcp_tools": [],
+      "invocation": "Run idea-creator-validator on inbox item {inbox_id} from inbox/pending.json"
+    },
+    {
+      "id": "daily-reporter",
+      "name": "Daily Reporter",
+      "description": "Morning digest synthesising tasks, inbox, memory, and blockers.",
+      "model_tier": "mid",
+      "trigger": "schedule",
+      "output_schema": "daily-digest",
+      "skills": ["presentation-hook", "project-memory"],
+      "mcp_tools": [],
+      "invocation": "Run daily-reporter for today's digest"
+    },
+    {
+      "id": "coding-agent",
+      "name": "Coding Agent",
+      "description": "Interrogate, visualise, plan, then build. Three mandatory phases before implementation.",
+      "model_tier": "full",
+      "trigger": "on_demand",
+      "output_schema": "build-plan",
+      "skills": ["presentation-hook", "clarification-protocol", "project-memory", "github-commit"],
+      "mcp_tools": ["filesystem"],
+      "invocation": "Run coding-agent for project {project_id}"
+    },
+    {
+      "id": "research-synthesiser",
+      "name": "Research Synthesiser",
+      "description": "Search, synthesise, proof-check claims, surface counterarguments.",
+      "model_tier": "mid",
+      "trigger": "on_demand",
+      "output_schema": "research-brief",
+      "skills": ["presentation-hook", "project-memory"],
+      "mcp_tools": ["web"],
+      "invocation": "Run research-synthesiser on topic: {topic}"
+    },
+    {
+      "id": "pain-points-resolver",
+      "name": "Pain Points Resolver",
+      "description": "Research open hurdles per project and return fix briefs.",
+      "model_tier": "mid",
+      "trigger": "schedule",
+      "output_schema": "pain-point-brief",
+      "skills": ["pain-points", "project-memory"],
+      "mcp_tools": [],
+      "invocation": "Run pain-points-resolver for project cortex"
+    }
+  ]
+}

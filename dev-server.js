@@ -1,9 +1,21 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { classifyInboxContent } = require('./lib/router');
+const { validate } = require('./lib/validate');
+const { readJsonFile, writeJsonFile, enqueueItem } = require('./lib/store');
 
 const rootDir = __dirname;
 const port = Number(process.env.PORT || 3000);
+
+const paths = {
+  memory: path.join(rootDir, '.memory', 'cortex.json'),
+  inbox: path.join(rootDir, 'inbox', 'pending.json'),
+  queue: path.join(rootDir, 'queue', 'pending.json'),
+  dashboard: path.join(rootDir, '.memory', 'dashboard.json'),
+  digest: path.join(rootDir, 'digests', 'latest.json'),
+  registry: path.join(rootDir, 'agents', 'registry.json')
+};
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -17,31 +29,7 @@ const contentTypes = {
   '.ico': 'image/x-icon'
 };
 
-const memoryPath = path.join(rootDir, '.memory', 'cortex.json');
-const inboxPath = path.join(rootDir, 'inbox', 'pending.json');
-
 let server;
-
-function readJsonFile(filePath, fallback) {
-  try {
-    if (!fs.existsSync(filePath)) {
-      return fallback;
-    }
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error(`Failed to read ${filePath}:`, err.message);
-    return fallback;
-  }
-}
-
-function writeJsonFile(filePath, data) {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
-}
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -67,9 +55,19 @@ function readBody(req) {
   });
 }
 
+function pushToQueue(inboxItem) {
+  if (!inboxItem.target_agent) return null;
+  return enqueueItem(paths.queue, {
+    inbox_id: inboxItem.id,
+    target_agent: inboxItem.target_agent,
+    route: inboxItem.route,
+    content: inboxItem.content
+  });
+}
+
 function handleApi(req, res, urlPath) {
   if (req.method === 'GET' && urlPath === '/api/memory/cortex') {
-    const memory = readJsonFile(memoryPath, null);
+    const memory = readJsonFile(paths.memory, null);
     if (!memory) {
       sendJson(res, 404, { error: 'Project memory not found' });
       return true;
@@ -78,9 +76,91 @@ function handleApi(req, res, urlPath) {
     return true;
   }
 
+  if (req.method === 'PATCH' && urlPath === '/api/memory/cortex') {
+    readBody(req)
+      .then((body) => {
+        const result = validate('project-memory', body);
+        if (!result.valid) {
+          sendJson(res, 400, { error: 'Schema validation failed', details: result.errors });
+          return;
+        }
+        if (body.project) {
+          body.project.updated_at = new Date().toISOString();
+        }
+        writeJsonFile(paths.memory, body);
+        sendJson(res, 200, body);
+      })
+      .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
+    return true;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/dashboard') {
+    const dashboard = readJsonFile(paths.dashboard, null);
+    sendJson(res, 200, dashboard || { theme: 'light-theme', dailyNotes: {}, projects: [], skills: [], tasks: [] });
+    return true;
+  }
+
+  if (req.method === 'PUT' && urlPath === '/api/dashboard') {
+    readBody(req)
+      .then((body) => {
+        const result = validate('dashboard', body);
+        if (!result.valid) {
+          sendJson(res, 400, { error: 'Schema validation failed', details: result.errors });
+          return;
+        }
+        body.updated_at = new Date().toISOString();
+        writeJsonFile(paths.dashboard, body);
+        sendJson(res, 200, body);
+      })
+      .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
+    return true;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/queue') {
+    const queue = readJsonFile(paths.queue, { items: [] });
+    sendJson(res, 200, queue);
+    return true;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/agents/registry') {
+    const registry = readJsonFile(paths.registry, { agents: [] });
+    sendJson(res, 200, registry);
+    return true;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/digests/latest') {
+    const digest = readJsonFile(paths.digest, null);
+    if (!digest) {
+      sendJson(res, 404, { error: 'No digest available' });
+      return true;
+    }
+    sendJson(res, 200, digest);
+    return true;
+  }
+
+  if (req.method === 'POST' && urlPath === '/api/validate') {
+    readBody(req)
+      .then((body) => {
+        const schemaId = body.schema_id;
+        const data = body.data;
+        if (!schemaId || data === undefined) {
+          sendJson(res, 400, { error: 'schema_id and data are required' });
+          return;
+        }
+        try {
+          const result = validate(schemaId, data);
+          sendJson(res, 200, result);
+        } catch (err) {
+          sendJson(res, 400, { error: err.message });
+        }
+      })
+      .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
+    return true;
+  }
+
   if (urlPath === '/api/inbox') {
     if (req.method === 'GET') {
-      const inbox = readJsonFile(inboxPath, { items: [] });
+      const inbox = readJsonFile(paths.inbox, { items: [] });
       sendJson(res, 200, inbox);
       return true;
     }
@@ -94,20 +174,27 @@ function handleApi(req, res, urlPath) {
             return;
           }
 
-          const inbox = readJsonFile(inboxPath, { items: [] });
-          if (!Array.isArray(inbox.items)) {
-            inbox.items = [];
-          }
+          const classified = classifyInboxContent(content);
+          const inbox = readJsonFile(paths.inbox, { items: [] });
+          if (!Array.isArray(inbox.items)) inbox.items = [];
 
           const item = {
             id: `inbox-${Date.now()}`,
-            content,
+            content: classified.content,
             status: 'pending',
+            route: classified.route,
+            target_agent: classified.target_agent,
             created_at: new Date().toISOString()
           };
           inbox.items.unshift(item);
-          writeJsonFile(inboxPath, inbox);
-          sendJson(res, 201, item);
+          writeJsonFile(paths.inbox, inbox);
+
+          let queueItem = null;
+          if (classified.target_agent) {
+            queueItem = pushToQueue(item);
+          }
+
+          sendJson(res, 201, { ...item, queue_item: queueItem });
         })
         .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
       return true;
@@ -117,25 +204,44 @@ function handleApi(req, res, urlPath) {
     if (req.method === 'PATCH' && patchMatch) {
       readBody(req)
         .then((body) => {
-          const inbox = readJsonFile(inboxPath, { items: [] });
+          const inbox = readJsonFile(paths.inbox, { items: [] });
           const item = (inbox.items || []).find((entry) => entry.id === patchMatch[1]);
           if (!item) {
             sendJson(res, 404, { error: 'Inbox item not found' });
             return;
           }
 
-          if (body.status) {
-            item.status = body.status;
-          }
+          if (body.status) item.status = body.status;
           if (body.status === 'processed') {
             item.processed_at = new Date().toISOString();
           }
-          writeJsonFile(inboxPath, inbox);
+          writeJsonFile(paths.inbox, inbox);
           sendJson(res, 200, item);
         })
         .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
       return true;
     }
+  }
+
+  const queuePatch = urlPath.match(/^\/api\/queue\/([^/]+)$/);
+  if (req.method === 'PATCH' && queuePatch) {
+    readBody(req)
+      .then((body) => {
+        const queue = readJsonFile(paths.queue, { items: [] });
+        const item = (queue.items || []).find((entry) => entry.id === queuePatch[1]);
+        if (!item) {
+          sendJson(res, 404, { error: 'Queue item not found' });
+          return;
+        }
+        if (body.status) item.status = body.status;
+        if (body.status === 'processed') {
+          item.processed_at = new Date().toISOString();
+        }
+        writeJsonFile(paths.queue, queue);
+        sendJson(res, 200, item);
+      })
+      .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
+    return true;
   }
 
   return false;
@@ -162,9 +268,7 @@ function createServer() {
     const urlPath = (req.url || '/').split('?')[0];
 
     if (urlPath.startsWith('/api/')) {
-      if (handleApi(req, res, urlPath)) {
-        return;
-      }
+      if (handleApi(req, res, urlPath)) return;
       sendJson(res, 404, { error: 'API route not found' });
       return;
     }
@@ -207,7 +311,6 @@ function startServer() {
       process.exit(1);
       return;
     }
-
     console.error('Server error:', err);
     process.exit(1);
   });
@@ -222,4 +325,8 @@ process.on('SIGINT', () => {
   }
 });
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { createServer, paths, readJsonFile, writeJsonFile, classifyInboxContent };

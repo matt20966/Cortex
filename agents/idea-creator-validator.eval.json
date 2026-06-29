@@ -1,0 +1,15 @@
+{
+  "target": "Returns valid JSON with verdict build|validate|kill and all four lenses addressed",
+  "failure_modes": [
+    { "id": "missing-verdict", "heuristic": "verdict field missing or not in enum" },
+    { "id": "vague-summary", "heuristic": "summary shorter than 20 characters" },
+    { "id": "skipped-lens", "heuristic": "pain_point or stress_test section missing" }
+  ],
+  "rubric": [
+    "pain_point_identified",
+    "dream_scenario_described",
+    "reach_assessed",
+    "stress_test_completed",
+    "verdict_justified"
+  ]
+}

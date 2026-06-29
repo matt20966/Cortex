@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "description": "Project file access for coding-agent"
+    }
+  },
+  "_comment": "Copy to .cursor/mcp.json or merge with existing MCP config. Agents declare mcp_tools in agents/registry.json."
+}

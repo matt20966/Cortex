@@ -86,6 +86,9 @@ class AppState {
         this.draggedTaskId = null;
         this.projectMemory = null;
         this.inbox = [];
+        this.agentRegistry = [];
+        this.agentQueue = [];
+        this.latestDigest = null;
         this._sidebarNavBuilt = false;
         this._sidebarProjectsBuilt = false;
         this._sidebarProjectCount = -1;
@@ -236,6 +239,79 @@ class AppState {
             }
         }
         return this.createDefaultData();
+    }
+
+    async loadDashboard() {
+        try {
+            const res = await fetch('/api/dashboard');
+            if (!res.ok) return;
+            const apiData = await res.json();
+            if (apiData.updated_at || (apiData.tasks && apiData.tasks.length) || (apiData.projects && apiData.projects.length)) {
+                this.data = this.normalizeData(apiData);
+                return;
+            }
+        } catch (e) {
+            console.warn('Could not load dashboard from API:', e);
+        }
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                if (!this.isLegacySampleData(parsed)) {
+                    this.data = this.normalizeData(parsed);
+                    await this.persistDashboard();
+                }
+            } catch (e) {
+                console.warn('Could not migrate localStorage dashboard:', e);
+            }
+        }
+    }
+
+    async persistDashboard() {
+        try {
+            await fetch('/api/dashboard', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.data)
+            });
+        } catch (e) {
+            console.warn('Could not persist dashboard:', e);
+        }
+    }
+
+    async loadAgentRegistry() {
+        try {
+            const res = await fetch('/api/agents/registry');
+            if (res.ok) {
+                const data = await res.json();
+                this.agentRegistry = Array.isArray(data.agents) ? data.agents : [];
+            }
+        } catch (e) {
+            console.warn('Could not load agent registry:', e);
+        }
+    }
+
+    async loadQueue() {
+        try {
+            const res = await fetch('/api/queue');
+            if (res.ok) {
+                const data = await res.json();
+                this.agentQueue = Array.isArray(data.items) ? data.items : [];
+            }
+        } catch (e) {
+            console.warn('Could not load agent queue:', e);
+        }
+    }
+
+    async loadLatestDigest() {
+        try {
+            const res = await fetch('/api/digests/latest');
+            if (res.ok) {
+                this.latestDigest = await res.json();
+            }
+        } catch (e) {
+            this.latestDigest = null;
+        }
     }
 
     async loadProjectMemory() {
@@ -714,6 +790,7 @@ class AppState {
 
     saveData() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+        this.persistDashboard();
         this.render();
     }
 
@@ -786,7 +863,14 @@ class AppState {
         }
 
         this.setupEventListeners();
-        Promise.all([this.loadProjectMemory(), this.loadInbox()]).then(() => {
+        Promise.all([
+            this.loadDashboard(),
+            this.loadProjectMemory(),
+            this.loadInbox(),
+            this.loadAgentRegistry(),
+            this.loadQueue(),
+            this.loadLatestDigest()
+        ]).then(() => {
             this._sidebarNavBuilt = false;
             this._sidebarProjectsBuilt = false;
             this._sidebarProjectCount = -1;
@@ -1064,15 +1148,19 @@ class AppState {
             });
         });
 
-        // AGENT RUNNER BUTTON LISTENERS
-        document.querySelectorAll('.btn-run-agent-instance').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const agentId = btn.getAttribute('data-agent');
-                this.runAgentSimulation(agentId, btn);
-            });
+        // AGENT RUNNER — delegated after dynamic render
+        document.getElementById('agents-grid-container')?.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-run-agent-instance');
+            if (!btn) return;
+            const agentId = btn.getAttribute('data-agent-id');
+            this.runAgentFromRegistry(agentId, btn);
         });
 
-        document.getElementById('btn-run-custom-agent').addEventListener('click', () => {
+        document.getElementById('btn-process-queue')?.addEventListener('click', () => {
+            this.processNextQueuedItem();
+        });
+
+        document.getElementById('btn-run-custom-agent')?.addEventListener('click', () => {
             this.triggerGlobalWorkspaceSynthesis();
         });
 
@@ -1183,7 +1271,10 @@ class AppState {
             activeSection = document.getElementById('view-daily-report');
             activeSection.classList.remove('hidden');
             activeSection.classList.add('active');
-            this.loadProjectMemory().then(() => this.loadInbox()).then(() => this.renderDailyReport());
+            this.loadProjectMemory()
+                .then(() => this.loadInbox())
+                .then(() => this.loadLatestDigest())
+                .then(() => this.renderDailyReport());
         } else if (viewName === 'inbox') {
             titleEl.textContent = 'Inbox';
             searchBox.classList.add('hidden');
@@ -1205,7 +1296,9 @@ class AppState {
             activeSection = document.getElementById('view-agent-runner');
             activeSection.classList.remove('hidden');
             activeSection.classList.add('active');
-            this.staggerChildren(document.querySelector('.agents-grid'), '.agent-card');
+            this.loadAgentRegistry()
+                .then(() => this.loadQueue())
+                .then(() => this.renderAgentRunner());
         }
 
         this.animateTitle(titleEl);
@@ -1559,7 +1652,24 @@ class AppState {
         this.staggerChildren(container, '.skill-card');
     }
 
+    renderAgentDigest() {
+        const container = document.getElementById('daily-report-agent-digest');
+        if (!container) return;
+
+        if (!this.latestDigest) {
+            container.innerHTML = '<p class="text-muted">No morning digest yet. Run <code>npm run digest</code> or daily-reporter in Cursor.</p>';
+            return;
+        }
+
+        if (window.CortexRenderers && this.latestDigest.schema_type) {
+            container.innerHTML = CortexRenderers.render(this.latestDigest.schema_type, this.latestDigest);
+        } else if (this.latestDigest.focus) {
+            container.innerHTML = `<p class="digest-focus"><strong>Focus:</strong> ${this.latestDigest.focus}</p>`;
+        }
+    }
+
     renderMemoryDigest() {
+        this.renderAgentDigest();
         const container = document.getElementById('daily-report-memory-container');
         if (!container) return;
 
@@ -1626,16 +1736,27 @@ class AppState {
                 const card = document.createElement('div');
                 card.className = `inbox-card ${item.status}`;
                 const created = new Date(item.created_at).toLocaleString();
+                const routeBadge = item.route && item.route !== 'unclassified'
+                    ? `<span class="inbox-route-badge">${item.route} → ${item.target_agent || 'review'}</span>`
+                    : '';
                 card.innerHTML = `
                     <div class="inbox-card-content">${item.content}</div>
                     <div class="inbox-card-meta">
                         <span>${created}</span>
+                        ${routeBadge}
                         <span class="inbox-status-badge ${item.status}">${item.status}</span>
                     </div>
                 `;
                 if (item.status === 'pending') {
                     const actions = document.createElement('div');
                     actions.className = 'inbox-card-actions';
+                    if (item.target_agent) {
+                        const runBtn = document.createElement('button');
+                        runBtn.className = 'btn btn-primary btn-sm';
+                        runBtn.textContent = 'Copy agent invocation';
+                        runBtn.addEventListener('click', () => this.copyAgentInvocation(item.target_agent, item.id));
+                        actions.appendChild(runBtn);
+                    }
                     const btn = document.createElement('button');
                     btn.className = 'btn btn-secondary btn-sm';
                     btn.textContent = 'Mark processed';
@@ -1864,50 +1985,108 @@ class AppState {
         linesContainer.scrollTop = linesContainer.scrollHeight;
     }
 
-    runAgentSimulation(agentId, btnEl) {
-        const statusBadge = document.getElementById(`status-agent-${agentId}`);
-        if (statusBadge.classList.contains('running')) {
-            // Stop Agent
-            statusBadge.className = 'agent-status-badge idle';
-            statusBadge.textContent = 'Idle';
-            btnEl.textContent = 'Run Agent';
-            this.appendConsoleLog(`[Agent #${agentId}] Execution terminated by user.`, 'system');
+    renderAgentRunner() {
+        const container = document.getElementById('agents-grid-container');
+        const queueEl = document.getElementById('agent-queue-summary');
+        if (!container) return;
+
+        container.innerHTML = '';
+        const pendingQueue = this.agentQueue.filter(q => q.status === 'pending');
+
+        if (queueEl) {
+            queueEl.textContent = pendingQueue.length > 0
+                ? `${pendingQueue.length} item(s) queued for agents`
+                : 'Queue empty — capture via Quick Add with idea:, pain:, research:, or task: prefix';
+        }
+
+        const tierLabels = { fast: 'Fast tier', mid: 'Mid tier', full: 'Full capability' };
+
+        this.agentRegistry.forEach(agent => {
+            const card = document.createElement('div');
+            card.className = 'agent-card';
+            const queued = pendingQueue.filter(q => q.target_agent === agent.id).length;
+            card.innerHTML = `
+                <div class="agent-card-header">
+                    <div class="agent-title-group">
+                        <h3 class="agent-card-title">${agent.name}</h3>
+                    </div>
+                    <span class="agent-status-badge idle" id="status-agent-${agent.id}">Idle</span>
+                </div>
+                <p class="agent-card-desc">${agent.description}</p>
+                <div class="agent-card-footer">
+                    <span class="agent-model-tag">${tierLabels[agent.model_tier] || agent.model_tier}</span>
+                    ${queued > 0 ? `<span class="agent-queue-count">${queued} queued</span>` : ''}
+                    <button class="btn btn-secondary btn-run-agent-instance" data-agent-id="${agent.id}">Copy invocation</button>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+
+        this.staggerChildren(container, '.agent-card');
+    }
+
+    buildAgentInvocation(agentId, inboxId) {
+        const agent = this.agentRegistry.find(a => a.id === agentId);
+        if (!agent) return '';
+        let text = agent.invocation || `Run ${agentId}`;
+        if (inboxId) text = text.replace('{inbox_id}', inboxId);
+        return text.replace('{project_id}', 'cortex').replace('{topic}', 'your topic here');
+    }
+
+    async copyAgentInvocation(agentId, inboxId) {
+        const text = this.buildAgentInvocation(agentId, inboxId);
+        try {
+            await navigator.clipboard.writeText(text);
+            this.showGlobalChatFeedback('Agent invocation copied');
+        } catch {
+            alert(`Run in Cursor:\n${text}`);
+        }
+    }
+
+    async processNextQueuedItem() {
+        const next = this.agentQueue.find(q => q.status === 'pending');
+        if (!next) {
+            this.appendConsoleLog('No items in agent queue.', 'system');
             return;
         }
+        await this.copyAgentInvocation(next.target_agent, next.inbox_id);
+        this.appendConsoleLog(`[Queue] Copied invocation for ${next.target_agent}: ${next.content?.slice(0, 60) || next.id}`, 'success');
+    }
 
-        // Start Agent
-        statusBadge.className = 'agent-status-badge running';
-        statusBadge.textContent = 'Running';
-        btnEl.textContent = 'Stop Agent';
+    async runAgentFromRegistry(agentId, btnEl) {
+        const agent = this.agentRegistry.find(a => a.id === agentId);
+        if (!agent) return;
 
-        if (agentId === '1') {
-            this.appendConsoleLog(`[Task Prioritizer] Spawning Claude 3.5 Sonnet instance...`, 'system');
-            setTimeout(() => this.appendConsoleLog(`[Task Prioritizer] Querying active task trees for overdue flags...`, 'tool'), 1200);
-            setTimeout(() => {
-                this.appendConsoleLog(`[Task Prioritizer] Success: Audited 6 tasks. Reprioritized 'Refactor frontend state' to HIGH priority.`, 'success');
-                statusBadge.className = 'agent-status-badge idle';
-                statusBadge.textContent = 'Idle';
-                btnEl.textContent = 'Run Agent';
-            }, 3500);
-        } else if (agentId === '2') {
-            this.appendConsoleLog(`[Deep Research Scraper] Spawning GPT-4o autonomous scraper...`, 'system');
-            setTimeout(() => this.appendConsoleLog(`[Deep Research Scraper] Tool call: web_search(query: 'latest state management paradigms 2026')...`, 'tool'), 1500);
-            setTimeout(() => {
-                this.appendConsoleLog(`[Deep Research Scraper] Success: Appended 3 relevant architectural reference links to Skills Folder 'Full-Stack Web Architecture'.`, 'success');
-                statusBadge.className = 'agent-status-badge idle';
-                statusBadge.textContent = 'Idle';
-                btnEl.textContent = 'Run Agent';
-            }, 4000);
-        } else if (agentId === '3') {
-            this.appendConsoleLog(`[Refactor & Cleanup] Spawning Gemini 1.5 Pro context evaluator...`, 'system');
-            setTimeout(() => this.appendConsoleLog(`[Refactor & Cleanup] Verifying localStorage consistency and purging abandoned project mappings...`, 'tool'), 1000);
-            setTimeout(() => {
-                this.appendConsoleLog(`[Refactor & Cleanup] Success: Workspace state verified. Zero orphaned data objects detected.`, 'success');
-                statusBadge.className = 'agent-status-badge idle';
-                statusBadge.textContent = 'Idle';
-                btnEl.textContent = 'Run Agent';
-            }, 3000);
+        const statusBadge = document.getElementById(`status-agent-${agentId}`);
+        const queueItem = this.agentQueue.find(q => q.target_agent === agentId && q.status === 'pending');
+        const invocation = this.buildAgentInvocation(agentId, queueItem?.inbox_id);
+
+        if (statusBadge) {
+            statusBadge.className = 'agent-status-badge running';
+            statusBadge.textContent = 'Ready';
         }
+        if (btnEl) btnEl.textContent = 'Copied';
+
+        this.appendConsoleLog(`[${agent.name}] ${invocation}`, 'system');
+
+        try {
+            await navigator.clipboard.writeText(invocation);
+            this.appendConsoleLog(`[${agent.name}] Invocation copied — paste in Cursor to run.`, 'success');
+        } catch {
+            this.appendConsoleLog(`[${agent.name}] Copy failed — run manually in Cursor.`, 'system');
+        }
+
+        setTimeout(() => {
+            if (statusBadge) {
+                statusBadge.className = 'agent-status-badge idle';
+                statusBadge.textContent = 'Idle';
+            }
+            if (btnEl) btnEl.textContent = 'Copy invocation';
+        }, 2500);
+    }
+
+    runAgentSimulation(agentId, btnEl) {
+        this.runAgentFromRegistry(agentId, btnEl);
     }
 
     triggerGlobalWorkspaceSynthesis() {

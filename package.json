@@ -4,6 +4,16 @@
   "private": true,
   "scripts": {
     "start": "node dev-server.js",
-    "dev": "node dev-server.js"
+    "dev": "node dev-server.js",
+    "test": "node --test test/**/*.test.js",
+    "signoff": "node .cursor/hooks/daily-signoff.js",
+    "digest": "node scripts/morning-digest.js",
+    "compact": "node scripts/memory-compaction.js",
+    "improve": "node scripts/self-improvement-review.js",
+    "notify": "node scripts/telegram-notify.js"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
   }
 }

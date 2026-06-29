@@ -2197,3 +2197,41 @@ body {
         width: 200px;
     }
 }
+
+.agent-output-card {
+    background: var(--surface-elevated, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.verdict-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.verdict-badge.success { background: #dcfce7; color: #166534; }
+.verdict-badge.warning { background: #fef9c3; color: #854d0e; }
+.verdict-badge.danger { background: #fee2e2; color: #991b1b; }
+
+.output-section { margin-top: 0.75rem; }
+.digest-focus { font-size: 1.05rem; margin-bottom: 0.5rem; }
+
+.inbox-route-badge {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    background: var(--primary-light, #e0e7ff);
+    color: var(--primary, #4f46e5);
+}
+
+.agent-queue-count {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    margin-right: 0.5rem;
+}

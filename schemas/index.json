@@ -1,0 +1,32 @@
+{
+  "schemas": [
+    {
+      "id": "project-memory",
+      "file": "project-memory.json",
+      "description": "Git-tracked project memory at .memory/cortex.json"
+    },
+    {
+      "id": "dashboard",
+      "file": "dashboard.json",
+      "description": "Dashboard state: tasks, projects, notes"
+    },
+    {
+      "id": "idea-validation",
+      "file": "agent-outputs/idea-validation.json",
+      "description": "idea-creator-validator output contract",
+      "renderer": "idea-validation"
+    },
+    {
+      "id": "daily-digest",
+      "file": "agent-outputs/daily-digest.json",
+      "description": "daily-reporter output contract",
+      "renderer": "daily-digest"
+    },
+    {
+      "id": "clarification-blocked",
+      "file": "agent-outputs/clarification-blocked.json",
+      "description": "clarification-protocol blocked output",
+      "renderer": "clarification-blocked"
+    }
+  ]
+}

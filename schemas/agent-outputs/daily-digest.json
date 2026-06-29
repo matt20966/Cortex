@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cortex.local/schemas/agent-outputs/daily-digest.json",
+  "type": "object",
+  "required": ["date", "focus", "priorities", "blockers"],
+  "additionalProperties": true,
+  "properties": {
+    "date": { "type": "string" },
+    "focus": { "type": "string", "minLength": 1 },
+    "priorities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item", "reason"],
+        "properties": {
+          "item": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "inbox_pending": { "type": "number" },
+    "new_ideas": { "type": "array" },
+    "overnight_activity": { "type": "string" }
+  }
+}
