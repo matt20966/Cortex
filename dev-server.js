@@ -4,7 +4,6 @@ const path = require('path');
 
 const rootDir = __dirname;
 const port = Number(process.env.PORT || 3000);
-const watchedFiles = ['index.html', 'styles.css', 'app.js'];
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -18,8 +17,129 @@ const contentTypes = {
   '.ico': 'image/x-icon'
 };
 
+const memoryPath = path.join(rootDir, '.memory', 'cortex.json');
+const inboxPath = path.join(rootDir, 'inbox', 'pending.json');
+
 let server;
-let watchers = [];
+
+function readJsonFile(filePath, fallback) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return fallback;
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error(`Failed to read ${filePath}:`, err.message);
+    return fallback;
+  }
+}
+
+function writeJsonFile(filePath, data) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+}
+
+function sendJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function handleApi(req, res, urlPath) {
+  if (req.method === 'GET' && urlPath === '/api/memory/cortex') {
+    const memory = readJsonFile(memoryPath, null);
+    if (!memory) {
+      sendJson(res, 404, { error: 'Project memory not found' });
+      return true;
+    }
+    sendJson(res, 200, memory);
+    return true;
+  }
+
+  if (urlPath === '/api/inbox') {
+    if (req.method === 'GET') {
+      const inbox = readJsonFile(inboxPath, { items: [] });
+      sendJson(res, 200, inbox);
+      return true;
+    }
+
+    if (req.method === 'POST') {
+      readBody(req)
+        .then((body) => {
+          const content = (body.content || '').trim();
+          if (!content) {
+            sendJson(res, 400, { error: 'content is required' });
+            return;
+          }
+
+          const inbox = readJsonFile(inboxPath, { items: [] });
+          if (!Array.isArray(inbox.items)) {
+            inbox.items = [];
+          }
+
+          const item = {
+            id: `inbox-${Date.now()}`,
+            content,
+            status: 'pending',
+            created_at: new Date().toISOString()
+          };
+          inbox.items.unshift(item);
+          writeJsonFile(inboxPath, inbox);
+          sendJson(res, 201, item);
+        })
+        .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
+      return true;
+    }
+
+    const patchMatch = urlPath.match(/^\/api\/inbox\/([^/]+)$/);
+    if (req.method === 'PATCH' && patchMatch) {
+      readBody(req)
+        .then((body) => {
+          const inbox = readJsonFile(inboxPath, { items: [] });
+          const item = (inbox.items || []).find((entry) => entry.id === patchMatch[1]);
+          if (!item) {
+            sendJson(res, 404, { error: 'Inbox item not found' });
+            return;
+          }
+
+          if (body.status) {
+            item.status = body.status;
+          }
+          if (body.status === 'processed') {
+            item.processed_at = new Date().toISOString();
+          }
+          writeJsonFile(inboxPath, inbox);
+          sendJson(res, 200, item);
+        })
+        .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function sendFile(res, filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -39,8 +159,18 @@ function sendFile(res, filePath) {
 
 function createServer() {
   return http.createServer((req, res) => {
-    const requestPath = req.url === '/' ? '/index.html' : req.url;
-    const safePath = path.normalize(decodeURIComponent(requestPath)).replace(/^\/+/, '');
+    const urlPath = (req.url || '/').split('?')[0];
+
+    if (urlPath.startsWith('/api/')) {
+      if (handleApi(req, res, urlPath)) {
+        return;
+      }
+      sendJson(res, 404, { error: 'API route not found' });
+      return;
+    }
+
+    const requestPath = urlPath === '/' ? '/index.html' : urlPath;
+    const safePath = path.normalize(decodeURIComponent(requestPath)).replace(/^(\.\.(\/|\\|$))+/, '');
     const filePath = path.join(rootDir, safePath);
 
     if (!filePath.startsWith(rootDir)) {
@@ -51,7 +181,7 @@ function createServer() {
 
     fs.stat(filePath, (err, stats) => {
       if (err || !stats.isFile()) {
-        if (req.url === '/') {
+        if (urlPath === '/') {
           sendFile(res, path.join(rootDir, 'index.html'));
         } else {
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -73,8 +203,8 @@ function startServer() {
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is already in use. Stopping this instance.`);
-      server.close(() => process.exit(1));
+      console.error(`Port ${port} is already in use.`);
+      process.exit(1);
       return;
     }
 
@@ -83,48 +213,13 @@ function startServer() {
   });
 }
 
-function stopServer() {
-  return new Promise((resolve) => {
-    if (!server) {
-      resolve();
-      return;
-    }
-
-    server.close(() => {
-      server = null;
-      resolve();
-    });
-  });
-}
-
-async function restartServer() {
-  console.log('Restarting site because a watched file changed...');
-  await stopServer();
-  startServer();
-}
-
-function watchFiles() {
-  watchedFiles.forEach((fileName) => {
-    const absolutePath = path.join(rootDir, fileName);
-    if (!fs.existsSync(absolutePath)) {
-      return;
-    }
-
-    const watcher = fs.watch(absolutePath, () => {
-      restartServer();
-    });
-    watchers.push(watcher);
-  });
-}
-
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   console.log('Stopping dev server...');
-  for (const watcher of watchers) {
-    watcher.close();
+  if (server) {
+    server.close(() => process.exit(0));
+  } else {
+    process.exit(0);
   }
-  await stopServer();
-  process.exit(0);
 });
 
 startServer();
-watchFiles();

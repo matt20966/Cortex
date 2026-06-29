@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "node .cursor/hooks/session-start.js"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "node .cursor/hooks/github-commit-gate.js",
+        "matcher": "git commit"
+      }
+    ],
+    "stop": [
+      {
+        "command": "node .cursor/hooks/agent-stop.js"
+      }
+    ]
+  }
+}

@@ -1,5 +1,67 @@
-// LOCAL STORAGE KEY
+﻿        // LOCAL STORAGE KEY
 const STORAGE_KEY = 'codespace_planner_data';
+
+const EWMA_ALPHA = 0.15;
+const SESSION_DWELL_CAP_MS = 1_800_000;
+const WARMUP_EVENTS = 10;
+const PRIMARY_SLOT_BUDGET = 5;
+const RECENT_MAX = 3;
+const PROJECT_VISIBLE_MAX = 5;
+
+const NAV_ITEMS = [
+    {
+        id: 'tasks',
+        label: 'Tasks',
+        badgeId: 'badge-tasks',
+        icon: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>'
+    },
+    {
+        id: 'projects',
+        label: 'Projects',
+        badgeId: 'badge-projects',
+        icon: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>'
+    },
+    {
+        id: 'calendar',
+        label: 'Calendar',
+        icon: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
+    },
+    {
+        id: 'skills',
+        label: 'Skills Folder',
+        badgeId: 'badge-skills',
+        icon: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>'
+    },
+    {
+        id: 'inbox',
+        label: 'Inbox',
+        badgeId: 'badge-inbox',
+        icon: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>'
+    },
+    {
+        id: 'daily_report',
+        label: 'Daily Report',
+        icon: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>'
+    },
+    {
+        id: 'agent_runner',
+        label: 'Agent Runner',
+        icon: '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>'
+    }
+];
+
+function createDefaultNavUsage() {
+    return {
+        lastView: 'tasks',
+        recentViews: [],
+        pins: ['tasks'],
+        views: {},
+        projects: {},
+        moreExpanded: false,
+        moreProjectsExpanded: false,
+        totalEvents: 0
+    };
+}
 
 // DEFAULT / INITIAL DATA
 const DEFAULT_DATA = {
@@ -7,25 +69,105 @@ const DEFAULT_DATA = {
     dailyNotes: {},
     projects: [],
     skills: [],
-    tasks: []
+    tasks: [],
+    navUsage: createDefaultNavUsage()
 };
 
 // STATE MANAGEMENT
 class AppState {
     constructor() {
         this.data = this.loadData();
-        this.currentView = 'tasks'; // 'tasks', 'projects', 'calendar', 'skills', 'daily_report', 'agent_runner'
-        this.taskViewMode = 'list'; // 'list', 'kanban'
-        this.filters = {
-            status: 'all',
-            priority: 'all',
-            project: 'all',
-            search: ''
-        };
-        this.calendarDate = new Date(); // defaults to current month/year
+        const validViews = NAV_ITEMS.map(n => n.id);
+        const lastView = this.data.navUsage?.lastView;
+        this.currentView = validViews.includes(lastView) ? lastView : 'tasks';
+        this.taskViewMode = 'list';
+        this.filters = { search: '', projectId: '' };
+        this.calendarDate = new Date();
         this.draggedTaskId = null;
+        this.projectMemory = null;
+        this.inbox = [];
+        this._sidebarNavBuilt = false;
+        this._sidebarProjectsBuilt = false;
+        this._sidebarProjectCount = -1;
+        this._viewEnteredAt = null;
+        this._sessionDwellByView = {};
+        this._navUsageSaveTimer = null;
 
         this.init();
+    }
+
+    prefersReducedMotion() {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    openModal(modalEl) {
+        if (!modalEl) return;
+        modalEl.classList.remove('hidden', 'closing');
+        modalEl.classList.add('open');
+    }
+
+    closeModal(modalEl) {
+        if (!modalEl || modalEl.classList.contains('hidden')) return;
+        if (this.prefersReducedMotion()) {
+            modalEl.classList.add('hidden');
+            modalEl.classList.remove('open', 'closing');
+            return;
+        }
+        modalEl.classList.remove('open');
+        modalEl.classList.add('closing');
+        const finish = () => {
+            modalEl.classList.add('hidden');
+            modalEl.classList.remove('closing');
+        };
+        const onEnd = (e) => {
+            if (e.target !== modalEl) return;
+            modalEl.removeEventListener('animationend', onEnd);
+            clearTimeout(fallback);
+            finish();
+        };
+        modalEl.addEventListener('animationend', onEnd);
+        const fallback = setTimeout(finish, 280);
+    }
+
+    closeAllModals() {
+        document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => this.closeModal(m));
+    }
+
+    staggerChildren(container, selector = ':scope > *') {
+        if (!container || this.prefersReducedMotion()) return;
+        container.querySelectorAll(selector).forEach((el, i) => {
+            el.classList.add('stagger-in');
+            el.style.animationDelay = `${Math.min(i * 45, 450)}ms`;
+        });
+    }
+
+    animateViewEnter(section) {
+        if (!section || this.prefersReducedMotion()) return;
+        section.classList.remove('view-enter');
+        void section.offsetWidth;
+        section.classList.add('view-enter');
+        section.addEventListener('animationend', () => section.classList.remove('view-enter'), { once: true });
+    }
+
+    animateTitle(titleEl) {
+        if (!titleEl || this.prefersReducedMotion()) return;
+        titleEl.classList.remove('title-animate');
+        void titleEl.offsetWidth;
+        titleEl.classList.add('title-animate');
+    }
+
+    popBadge(badgeEl) {
+        if (!badgeEl || this.prefersReducedMotion()) return;
+        badgeEl.classList.remove('badge-pop');
+        void badgeEl.offsetWidth;
+        badgeEl.classList.add('badge-pop');
+    }
+
+    popMetric(metricEl) {
+        if (!metricEl || this.prefersReducedMotion()) return;
+        metricEl.classList.remove('metric-pop');
+        void metricEl.offsetWidth;
+        metricEl.classList.add('metric-pop');
     }
 
     createDefaultData() {
@@ -34,7 +176,23 @@ class AppState {
             dailyNotes: {},
             projects: [],
             skills: [],
-            tasks: []
+            tasks: [],
+            navUsage: createDefaultNavUsage()
+        };
+    }
+
+    normalizeNavUsage(raw) {
+        const defaults = createDefaultNavUsage();
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return defaults;
+        return {
+            lastView: typeof raw.lastView === 'string' ? raw.lastView : defaults.lastView,
+            recentViews: Array.isArray(raw.recentViews) ? raw.recentViews.filter(id => typeof id === 'string').slice(0, RECENT_MAX) : defaults.recentViews,
+            pins: Array.isArray(raw.pins) && raw.pins.length ? raw.pins.filter(id => typeof id === 'string') : defaults.pins,
+            views: raw.views && typeof raw.views === 'object' && !Array.isArray(raw.views) ? raw.views : defaults.views,
+            projects: raw.projects && typeof raw.projects === 'object' && !Array.isArray(raw.projects) ? raw.projects : defaults.projects,
+            moreExpanded: Boolean(raw.moreExpanded),
+            moreProjectsExpanded: Boolean(raw.moreProjectsExpanded),
+            totalEvents: typeof raw.totalEvents === 'number' && raw.totalEvents >= 0 ? raw.totalEvents : defaults.totalEvents
         };
     }
 
@@ -42,29 +200,24 @@ class AppState {
         if (!data || typeof data !== 'object' || Array.isArray(data)) {
             return this.createDefaultData();
         }
-
         return {
             theme: data.theme || 'light-theme',
             dailyNotes: data.dailyNotes && typeof data.dailyNotes === 'object' && !Array.isArray(data.dailyNotes) ? data.dailyNotes : {},
             projects: Array.isArray(data.projects) ? data.projects : [],
             skills: Array.isArray(data.skills) ? data.skills : [],
-            tasks: Array.isArray(data.tasks) ? data.tasks : []
+            tasks: Array.isArray(data.tasks) ? data.tasks : [],
+            navUsage: this.normalizeNavUsage(data.navUsage)
         };
     }
 
     isLegacySampleData(data) {
-        if (!data || typeof data !== 'object' || Array.isArray(data)) {
-            return false;
-        }
-
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
         const sampleProjectIds = ['proj-1', 'proj-2', 'proj-3'];
         const sampleTaskIds = ['task-1', 'task-2', 'task-3', 'task-4', 'task-5', 'task-6'];
         const sampleSkillIds = ['skill-1', 'skill-2', 'skill-3'];
-
-        const hasSampleProject = Array.isArray(data.projects) && data.projects.some(project => sampleProjectIds.includes(project.id));
-        const hasSampleTask = Array.isArray(data.tasks) && data.tasks.some(task => sampleTaskIds.includes(task.id));
-        const hasSampleSkill = Array.isArray(data.skills) && data.skills.some(skill => sampleSkillIds.includes(skill.id));
-
+        const hasSampleProject = Array.isArray(data.projects) && data.projects.some(p => sampleProjectIds.includes(p.id));
+        const hasSampleTask = Array.isArray(data.tasks) && data.tasks.some(t => sampleTaskIds.includes(t.id));
+        const hasSampleSkill = Array.isArray(data.skills) && data.skills.some(s => sampleSkillIds.includes(s.id));
         return hasSampleProject || hasSampleTask || hasSampleSkill;
     }
 
@@ -85,16 +238,546 @@ class AppState {
         return this.createDefaultData();
     }
 
+    async loadProjectMemory() {
+        try {
+            const res = await fetch('/api/memory/cortex');
+            if (res.ok) {
+                this.projectMemory = await res.json();
+            }
+        } catch (e) {
+            console.warn('Could not load project memory:', e);
+        }
+    }
+
+    async loadInbox() {
+        try {
+            const res = await fetch('/api/inbox');
+            if (res.ok) {
+                const data = await res.json();
+                this.inbox = Array.isArray(data.items) ? data.items : [];
+            }
+        } catch (e) {
+            console.warn('Could not load inbox:', e);
+        }
+    }
+
+    async addToInbox(content) {
+        try {
+            const res = await fetch('/api/inbox', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content })
+            });
+            if (res.ok) {
+                const item = await res.json();
+                this.inbox.unshift(item);
+                this.renderSidebar();
+                if (this.currentView === 'inbox') this.renderInbox();
+                if (this.currentView === 'daily_report') this.renderDailyReport();
+                return item;
+            }
+        } catch (e) {
+            console.warn('Could not save to inbox:', e);
+        }
+        return null;
+    }
+
+    async markInboxProcessed(id) {
+        try {
+            const res = await fetch(`/api/inbox/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'processed' })
+            });
+            if (res.ok) {
+                const item = await res.json();
+                const idx = this.inbox.findIndex(i => i.id === id);
+                if (idx !== -1) this.inbox[idx] = item;
+                this.renderSidebar();
+                if (this.currentView === 'inbox') this.renderInbox();
+                if (this.currentView === 'daily_report') this.renderDailyReport();
+            }
+        } catch (e) {
+            console.warn('Could not update inbox item:', e);
+        }
+    }
+
+    getYesterdayIso() {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        d.setHours(23, 59, 59, 999);
+        return d.toISOString();
+    }
+
+    getMemoryIdeasSince(isoDate) {
+        if (!this.projectMemory || !Array.isArray(this.projectMemory.ideas)) return [];
+        return this.projectMemory.ideas.filter(idea => idea.created_at > isoDate);
+    }
+
+    getOpenPainPoints() {
+        if (!this.projectMemory || !Array.isArray(this.projectMemory.pain_points)) return [];
+        return this.projectMemory.pain_points.filter(p => p.status === 'open' || p.status === 'in_progress');
+    }
+
+    getPendingInboxCount() {
+        return this.inbox.filter(i => i.status === 'pending').length;
+    }
+
+    ensureNavUsage() {
+        if (!this.data.navUsage) {
+            this.data.navUsage = createDefaultNavUsage();
+        }
+        return this.data.navUsage;
+    }
+
+    ensureViewStats(nav, viewId) {
+        if (!nav.views[viewId]) {
+            nav.views[viewId] = { clicks: 0, dwellMs: 0, lastVisited: null, ewma: 0 };
+        }
+        return nav.views[viewId];
+    }
+
+    ensureProjectStats(nav, projectId) {
+        if (!nav.projects[projectId]) {
+            nav.projects[projectId] = { clicks: 0, dwellMs: 0, lastVisited: null, ewma: 0 };
+        }
+        return nav.projects[projectId];
+    }
+
+    saveNavUsage() {
+        clearTimeout(this._navUsageSaveTimer);
+        this._navUsageSaveTimer = setTimeout(() => {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+        }, 300);
+    }
+
+    getViewScore(viewId) {
+        const nav = this.ensureNavUsage();
+        const stats = nav.views[viewId];
+        let score = stats?.ewma || 0;
+        if (viewId === 'inbox' && this.getPendingInboxCount() > 0) score += 3;
+        return score;
+    }
+
+    getProjectScore(projectId) {
+        const nav = this.ensureNavUsage();
+        return nav.projects[projectId]?.ewma || 0;
+    }
+
+    recordNavEvent(type, id, { isClick = false } = {}) {
+        const nav = this.ensureNavUsage();
+        const now = new Date().toISOString();
+
+        if (type === 'view') {
+            nav.recentViews = [id, ...(nav.recentViews || []).filter(v => v !== id)].slice(0, RECENT_MAX);
+            nav.lastView = id;
+            const stats = this.ensureViewStats(nav, id);
+            if (isClick) {
+                stats.clicks = (stats.clicks || 0) + 1;
+                stats.ewma = (stats.ewma || 0) * (1 - EWMA_ALPHA) + 1.0 * EWMA_ALPHA;
+                nav.totalEvents = (nav.totalEvents || 0) + 1;
+            }
+            stats.lastVisited = now;
+        } else if (type === 'project') {
+            const stats = this.ensureProjectStats(nav, id);
+            if (isClick) {
+                stats.clicks = (stats.clicks || 0) + 1;
+                stats.ewma = (stats.ewma || 0) * (1 - EWMA_ALPHA) + 1.0 * EWMA_ALPHA;
+                nav.totalEvents = (nav.totalEvents || 0) + 1;
+            }
+            stats.lastVisited = now;
+        }
+
+        this.saveNavUsage();
+    }
+
+    flushDwellTime() {
+        if (!this._viewEnteredAt || document.hidden) return;
+
+        const view = this.currentView;
+        const now = Date.now();
+        let elapsed = now - this._viewEnteredAt;
+        this._viewEnteredAt = now;
+
+        const already = this._sessionDwellByView[view] || 0;
+        const cap = SESSION_DWELL_CAP_MS - already;
+        if (cap <= 0) return;
+
+        elapsed = Math.min(elapsed, cap);
+        this._sessionDwellByView[view] = already + elapsed;
+
+        const nav = this.ensureNavUsage();
+        const stats = this.ensureViewStats(nav, view);
+        stats.dwellMs = (stats.dwellMs || 0) + elapsed;
+        const minutes = elapsed / 60000;
+        stats.ewma = (stats.ewma || 0) * (1 - EWMA_ALPHA) + minutes * EWMA_ALPHA;
+
+        this.saveNavUsage();
+    }
+
+    getNavLayout() {
+        const nav = this.ensureNavUsage();
+        const allIds = NAV_ITEMS.map(n => n.id);
+        const defaultOrder = [...allIds];
+
+        if ((nav.totalEvents || 0) < WARMUP_EVENTS) {
+            return {
+                showLabels: false,
+                defaultOrder,
+                recent: [],
+                frequent: [],
+                more: [],
+                moreExpanded: false
+            };
+        }
+
+        const primary = new Set();
+        const pins = (nav.pins || ['tasks']).filter(id => allIds.includes(id));
+        pins.forEach(id => primary.add(id));
+
+        (nav.recentViews || []).slice(0, RECENT_MAX).forEach(id => {
+            if (allIds.includes(id)) primary.add(id);
+        });
+
+        const candidates = allIds
+            .filter(id => !primary.has(id))
+            .map(id => ({ id, score: this.getViewScore(id) }))
+            .sort((a, b) => b.score - a.score);
+
+        for (const c of candidates) {
+            if (primary.size >= PRIMARY_SLOT_BUDGET) break;
+            primary.add(c.id);
+        }
+
+        const recent = (nav.recentViews || []).filter(id => primary.has(id)).slice(0, RECENT_MAX);
+        const frequent = allIds
+            .filter(id => primary.has(id) && !recent.includes(id))
+            .sort((a, b) => {
+                const aPin = pins.indexOf(a);
+                const bPin = pins.indexOf(b);
+                if (aPin !== -1 || bPin !== -1) {
+                    if (aPin !== -1 && bPin !== -1) return aPin - bPin;
+                    if (aPin !== -1) return -1;
+                    return 1;
+                }
+                return this.getViewScore(b) - this.getViewScore(a);
+            });
+        const more = allIds.filter(id => !primary.has(id));
+        const moreExpanded = more.includes(this.currentView) ? true : Boolean(nav.moreExpanded);
+
+        return { showLabels: true, defaultOrder, recent, frequent, more, moreExpanded };
+    }
+
+    getProjectLayout() {
+        const nav = this.ensureNavUsage();
+        const projects = [...this.data.projects];
+        const warmed = (nav.totalEvents || 0) >= WARMUP_EVENTS;
+
+        if (!warmed || projects.length <= PROJECT_VISIBLE_MAX) {
+            return {
+                visible: projects,
+                overflow: [],
+                moreExpanded: false
+            };
+        }
+
+        const sorted = projects
+            .map(p => ({ project: p, score: this.getProjectScore(p.id) }))
+            .sort((a, b) => b.score - a.score);
+
+        const visible = sorted.slice(0, PROJECT_VISIBLE_MAX).map(s => s.project);
+        const overflow = sorted.slice(PROJECT_VISIBLE_MAX).map(s => s.project);
+        const overflowIds = overflow.map(p => p.id);
+        const moreExpanded = overflowIds.includes(this.filters.projectId) ? true : Boolean(nav.moreProjectsExpanded);
+
+        return { visible, overflow, moreExpanded };
+    }
+
+    renderNavItem(viewId) {
+        const item = NAV_ITEMS.find(n => n.id === viewId);
+        if (!item) return null;
+
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'nav-item';
+        if (this.currentView === viewId) a.classList.add('active');
+        a.setAttribute('data-view', viewId);
+
+        let badgeHtml = '';
+        if (item.badgeId) {
+            const hiddenClass = item.badgeId === 'badge-inbox' ? ' hidden' : '';
+            badgeHtml = `<span id="${item.badgeId}" class="badge${hiddenClass}">0</span>`;
+        }
+        a.innerHTML = `${item.icon}<span>${item.label}</span>${badgeHtml}`;
+        return a;
+    }
+
+    appendNavGroup(container, label, viewIds) {
+        if (!viewIds.length) return;
+        if (label) {
+            const title = document.createElement('div');
+            title.className = 'nav-group-label';
+            title.textContent = label;
+            container.appendChild(title);
+        }
+        viewIds.forEach(viewId => {
+            const el = this.renderNavItem(viewId);
+            if (el) container.appendChild(el);
+        });
+    }
+
+    buildSidebarNav() {
+        const layout = this.getNavLayout();
+        const recentEl = document.getElementById('sidebar-nav-recent');
+        const frequentEl = document.getElementById('sidebar-nav-frequent');
+        const defaultEl = document.getElementById('sidebar-nav-default');
+        const moreEl = document.getElementById('sidebar-nav-more');
+
+        recentEl.innerHTML = '';
+        frequentEl.innerHTML = '';
+        defaultEl.innerHTML = '';
+        moreEl.innerHTML = '';
+        moreEl.classList.add('hidden');
+
+        if (!layout.showLabels) {
+            defaultEl.classList.remove('hidden');
+            recentEl.classList.add('hidden');
+            frequentEl.classList.add('hidden');
+            layout.defaultOrder.forEach(viewId => {
+                const el = this.renderNavItem(viewId);
+                if (el) defaultEl.appendChild(el);
+            });
+            this.staggerChildren(defaultEl, '.nav-item');
+        } else {
+            defaultEl.classList.add('hidden');
+            recentEl.classList.remove('hidden');
+            frequentEl.classList.remove('hidden');
+
+            if (layout.recent.length) {
+                this.appendNavGroup(recentEl, 'Recent', layout.recent);
+            }
+            if (layout.frequent.length) {
+                this.appendNavGroup(frequentEl, 'Frequent', layout.frequent);
+            }
+
+            if (layout.more.length) {
+                moreEl.classList.remove('hidden');
+                moreEl.classList.toggle('expanded', layout.moreExpanded);
+
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'nav-more-toggle';
+                toggle.setAttribute('aria-expanded', layout.moreExpanded ? 'true' : 'false');
+                toggle.innerHTML = `
+                    <svg class="nav-more-chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <span>More</span>
+                    <span class="nav-more-count">${layout.more.length}</span>
+                `;
+                moreEl.appendChild(toggle);
+
+                const itemsWrap = document.createElement('div');
+                itemsWrap.className = 'nav-more-items';
+                layout.more.forEach(viewId => {
+                    const el = this.renderNavItem(viewId);
+                    if (el) itemsWrap.appendChild(el);
+                });
+                moreEl.appendChild(itemsWrap);
+            }
+        }
+
+        this._sidebarNavBuilt = true;
+        this.updateNavBadges();
+    }
+
+    updateNavBadges() {
+        const counts = {
+            'badge-tasks': this.data.tasks.filter(t => t.status !== 'completed').length,
+            'badge-projects': this.data.projects.filter(p => p.status === 'active').length,
+            'badge-skills': (this.data.skills || []).length,
+            'badge-inbox': this.getPendingInboxCount()
+        };
+
+        Object.entries(counts).forEach(([id, count]) => {
+            const badge = document.getElementById(id);
+            if (!badge) return;
+            if (badge.textContent !== String(count)) this.popBadge(badge);
+            badge.textContent = count;
+            if (id === 'badge-inbox') {
+                badge.classList.toggle('hidden', count === 0);
+            }
+        });
+    }
+
+    toggleNavMore() {
+        const nav = this.ensureNavUsage();
+        nav.moreExpanded = !nav.moreExpanded;
+        const moreEl = document.getElementById('sidebar-nav-more');
+        if (moreEl) {
+            moreEl.classList.toggle('expanded', nav.moreExpanded);
+            const toggle = moreEl.querySelector('.nav-more-toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', nav.moreExpanded ? 'true' : 'false');
+        }
+        this.saveNavUsage();
+    }
+
+    toggleProjectsMore() {
+        const nav = this.ensureNavUsage();
+        nav.moreProjectsExpanded = !nav.moreProjectsExpanded;
+        const moreEl = document.getElementById('sidebar-projects-more');
+        if (moreEl) {
+            moreEl.classList.toggle('expanded', nav.moreProjectsExpanded);
+            const toggle = moreEl.querySelector('.project-more-toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', nav.moreProjectsExpanded ? 'true' : 'false');
+        }
+        this.saveNavUsage();
+    }
+
+    renderProjectMiniItem(project) {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'project-mini-item';
+        if (this.filters.projectId === project.id) item.classList.add('active');
+        item.setAttribute('data-project-id', project.id);
+        item.innerHTML = `
+            <span class="project-dot" style="background-color: ${project.color}"></span>
+            <span>${project.name}</span>
+        `;
+        return item;
+    }
+
+    renderSidebarProjects() {
+        const projectCount = this.data.projects.length;
+        if (!this._sidebarProjectsBuilt || projectCount !== this._sidebarProjectCount) {
+            this.buildSidebarProjects();
+            this._sidebarProjectCount = projectCount;
+            return;
+        }
+        document.querySelectorAll('.project-mini-item').forEach(item => {
+            const id = item.getAttribute('data-project-id');
+            item.classList.toggle('active', id === this.filters.projectId);
+        });
+    }
+
+    buildSidebarProjects() {
+        const layout = this.getProjectLayout();
+        const container = document.getElementById('sidebar-projects-container');
+        const moreEl = document.getElementById('sidebar-projects-more');
+
+        container.innerHTML = '';
+        moreEl.innerHTML = '';
+        moreEl.classList.add('hidden');
+
+        layout.visible.forEach(p => container.appendChild(this.renderProjectMiniItem(p)));
+        this.staggerChildren(container, '.project-mini-item');
+
+        if (layout.overflow.length) {
+            moreEl.classList.remove('hidden');
+            moreEl.classList.toggle('expanded', layout.moreExpanded);
+
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'project-more-toggle';
+            toggle.setAttribute('aria-expanded', layout.moreExpanded ? 'true' : 'false');
+            toggle.innerHTML = `
+                <svg class="nav-more-chevron" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                <span>More projects</span>
+                <span class="nav-more-count">${layout.overflow.length}</span>
+            `;
+            moreEl.appendChild(toggle);
+
+            const itemsWrap = document.createElement('div');
+            itemsWrap.className = 'project-more-items';
+            layout.overflow.forEach(p => itemsWrap.appendChild(this.renderProjectMiniItem(p)));
+            moreEl.appendChild(itemsWrap);
+        }
+
+        this._sidebarProjectsBuilt = true;
+    }
+
+    startNavTracking() {
+        this._viewEnteredAt = Date.now();
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.flushDwellTime();
+                this._viewEnteredAt = null;
+            } else {
+                this._viewEnteredAt = Date.now();
+            }
+        });
+
+        window.addEventListener('pagehide', () => this.flushDwellTime());
+
+        if (this._dwellInterval) clearInterval(this._dwellInterval);
+        this._dwellInterval = setInterval(() => this.flushDwellTime(), 30000);
+    }
+
     saveData() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
         this.render();
     }
 
-    // Initialize event listeners and first render
+    async addQuickNote(text) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        if (!this.data.dailyNotes) this.data.dailyNotes = {};
+        const entry = `[${timeStr}] ${text}`;
+        const existing = this.data.dailyNotes[todayStr];
+        this.data.dailyNotes[todayStr] = existing ? `${existing}\n${entry}` : entry;
+
+        const notesInput = document.getElementById('daily-notes-input');
+        if (notesInput) notesInput.value = this.data.dailyNotes[todayStr];
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+        await this.addToInbox(text);
+        this.showGlobalChatFeedback('Saved to inbox & today\'s notes');
+    }
+
+    showGlobalChatFeedback(message = 'Saved to inbox & today\'s notes') {
+        const feedback = document.getElementById('global-chat-feedback');
+        if (!feedback) return;
+        feedback.textContent = message;
+        feedback.classList.add('visible');
+        clearTimeout(this._globalChatFeedbackTimer);
+        this._globalChatFeedbackTimer = setTimeout(() => {
+            feedback.classList.remove('visible');
+        }, 2000);
+    }
+
+    shouldPreserveFocusTarget(target) {
+        if (!target || !target.closest) return true;
+        if (target.closest('.modal-overlay:not(.hidden)')) return true;
+        return !!target.closest('input, textarea, select, button, a, label, [contenteditable]');
+    }
+
+    focusGlobalChatInput({ force = false } = {}) {
+        const input = document.getElementById('global-chat-input');
+        if (!input) return;
+        if (document.querySelector('.modal-overlay:not(.hidden)')) return;
+
+        const active = document.activeElement;
+        const otherInputs = ['search-input', 'daily-notes-input', 'agent-prompt-input'];
+        if (!force && active && otherInputs.includes(active.id)) return;
+
+        input.focus();
+    }
+
+    setupGlobalChatFocus() {
+        this.focusGlobalChatInput();
+
+        document.querySelector('.app-container').addEventListener('mousedown', (e) => {
+            if (this.shouldPreserveFocusTarget(e.target)) return;
+            this.focusGlobalChatInput({ force: true });
+        });
+
+        window.addEventListener('focus', () => {
+            this.focusGlobalChatInput();
+        });
+    }
+
     init() {
         document.body.className = 'light-theme';
-        
-        // Set Topbar Date Display
+
         const topbarDateEl = document.querySelector('#topbar-date-display span');
         if (topbarDateEl) {
             const today = new Date();
@@ -103,17 +786,60 @@ class AppState {
         }
 
         this.setupEventListeners();
-        this.render();
+        Promise.all([this.loadProjectMemory(), this.loadInbox()]).then(() => {
+            this._sidebarNavBuilt = false;
+            this._sidebarProjectsBuilt = false;
+            this._sidebarProjectCount = -1;
+            this.renderSidebar();
+            this.renderProjectSelects();
+            this.switchView(this.currentView, { skipRecord: true });
+            this.startNavTracking();
+        });
+
+        requestAnimationFrame(() => {
+            document.body.classList.add('app-ready');
+            document.body.classList.remove('page-enter');
+        });
     }
 
     setupEventListeners() {
-        // Sidebar Navigation
-        document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
-            item.addEventListener('click', (e) => {
+        // Sidebar Navigation (event delegation — nav items are rebuilt on load)
+        document.querySelector('.sidebar-nav').addEventListener('click', (e) => {
+            if (e.target.closest('#btn-sidebar-add-project')) return;
+
+            const moreToggle = e.target.closest('.nav-more-toggle');
+            if (moreToggle) {
                 e.preventDefault();
-                const view = item.getAttribute('data-view');
-                this.switchView(view);
-            });
+                this.toggleNavMore();
+                return;
+            }
+
+            const item = e.target.closest('.nav-item');
+            if (item) {
+                e.preventDefault();
+                this.filters.projectId = '';
+                this.switchView(item.getAttribute('data-view'));
+            }
+        });
+
+        document.querySelector('.sidebar-projects-list').addEventListener('click', (e) => {
+            if (e.target.closest('#btn-sidebar-add-project')) return;
+
+            const moreToggle = e.target.closest('.project-more-toggle');
+            if (moreToggle) {
+                e.preventDefault();
+                this.toggleProjectsMore();
+                return;
+            }
+
+            const projectItem = e.target.closest('.project-mini-item');
+            if (projectItem) {
+                e.preventDefault();
+                const projectId = projectItem.getAttribute('data-project-id');
+                this.recordNavEvent('project', projectId, { isClick: true });
+                this.filters.projectId = projectId;
+                this.switchView('tasks');
+            }
         });
 
         // Tasks View Mode Toggle (List vs Kanban)
@@ -145,18 +871,9 @@ class AppState {
             this.renderTasks();
         });
 
-        // Task Filters
-        document.getElementById('filter-status').addEventListener('change', (e) => {
-            this.filters.status = e.target.value;
-            this.renderTasks();
-        });
-        document.getElementById('filter-priority').addEventListener('change', (e) => {
-            this.filters.priority = e.target.value;
-            this.renderTasks();
-        });
-        document.getElementById('filter-project').addEventListener('change', (e) => {
-            this.filters.project = e.target.value;
-            this.renderTasks();
+        // Add Task Button
+        document.getElementById('btn-header-add-task').addEventListener('click', () => {
+            this.openTaskModal();
         });
 
         // Add Project Buttons
@@ -175,7 +892,8 @@ class AppState {
         // Modal Close Buttons
         document.querySelectorAll('.btn-close-modal, .btn-cancel-modal').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+                this.closeAllModals();
+                this.focusGlobalChatInput();
             });
         });
 
@@ -189,8 +907,9 @@ class AppState {
             const id = document.getElementById('task-id').value;
             if (id && confirm('Are you sure you want to delete this task?')) {
                 this.data.tasks = this.data.tasks.filter(t => t.id !== id);
-                document.getElementById('modal-task').classList.add('hidden');
+                this.closeModal(document.getElementById('modal-task'));
                 this.saveData();
+                this.focusGlobalChatInput();
             }
         });
 
@@ -207,8 +926,9 @@ class AppState {
                 this.data.tasks.forEach(t => {
                     if (t.projectId === id) t.projectId = '';
                 });
-                document.getElementById('modal-project').classList.add('hidden');
+                this.closeModal(document.getElementById('modal-project'));
                 this.saveData();
+                this.focusGlobalChatInput();
             }
         });
 
@@ -222,8 +942,9 @@ class AppState {
             const id = document.getElementById('skill-id').value;
             if (id && confirm('Are you sure you want to delete this skill folder?')) {
                 this.data.skills = this.data.skills.filter(s => s.id !== id);
-                document.getElementById('modal-skill').classList.add('hidden');
+                this.closeModal(document.getElementById('modal-skill'));
                 this.saveData();
+                this.focusGlobalChatInput();
             }
         });
 
@@ -236,22 +957,55 @@ class AppState {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
         });
 
+        // Global Quick-Add Input
+        const globalChatInput = document.getElementById('global-chat-input');
+        const submitGlobalChat = async () => {
+            const text = globalChatInput.value.trim();
+            if (!text) return;
+            await this.addQuickNote(text);
+            globalChatInput.value = '';
+            this.focusGlobalChatInput({ force: true });
+        };
+        document.getElementById('btn-submit-global-chat').addEventListener('click', submitGlobalChat);
+        globalChatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitGlobalChat();
+            }
+        });
+        this.setupGlobalChatFocus();
+
         // Copy Daily Summary Button
         const copyBtn = document.getElementById('btn-copy-daily-summary');
         copyBtn.addEventListener('click', () => {
             const todayStr = new Date().toISOString().split('T')[0];
             const completedTasks = this.data.tasks.filter(t => t.status === 'completed');
             const activeProjects = this.data.projects.filter(p => p.status === 'active');
-            const notes = (this.data.dailyNotes && this.data.dailyNotes[todayStr]) || "No notes logged for today.";
+            const notes = (this.data.dailyNotes && this.data.dailyNotes[todayStr]) || 'No notes logged for today.';
+            const pendingInbox = this.getPendingInboxCount();
+            const painPoints = this.getOpenPainPoints();
+            const newIdeas = this.getMemoryIdeasSince(this.getYesterdayIso());
 
-            let summaryText = `📊 DAILY STANDUP REPORT — ${todayStr}\n\n`;
-            summaryText += `✅ TASKS COMPLETED (${completedTasks.length}):\n`;
+            let summaryText = `DAILY STANDUP REPORT — ${todayStr}\n\n`;
+            summaryText += `TASKS COMPLETED (${completedTasks.length}):\n`;
             completedTasks.forEach(t => { summaryText += ` - ${t.title}\n`; });
-            
-            summaryText += `\n🚀 ACTIVE PROJECTS (${activeProjects.length}):\n`;
+
+            summaryText += `\nACTIVE PROJECTS (${activeProjects.length}):\n`;
             activeProjects.forEach(p => { summaryText += ` - ${p.name}\n`; });
 
-            summaryText += `\n📝 DAILY REFLECTION & NOTES:\n${notes}\n`;
+            summaryText += `\nINBOX PENDING: ${pendingInbox}\n`;
+
+            if (newIdeas.length > 0) {
+                summaryText += `\nNEW IDEAS (since yesterday):\n`;
+                newIdeas.forEach(i => { summaryText += ` - ${i.content}${i.verdict ? ` [${i.verdict}]` : ''}\n`; });
+            }
+
+            if (painPoints.length > 0) {
+                summaryText += `\nOPEN BLOCKERS:\n`;
+                painPoints.forEach(p => { summaryText += ` - [${p.status}] ${p.description}\n`; });
+            }
+
+            summaryText += `\nDAILY REFLECTION & NOTES:\n${notes}\n`;
 
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(summaryText).then(() => {
@@ -332,9 +1086,15 @@ class AppState {
         });
     }
 
-    switchView(viewName) {
+    switchView(viewName, { skipRecord = false } = {}) {
+        const viewChanged = viewName !== this.currentView;
+        if (viewChanged) {
+            this.flushDwellTime();
+            this._viewEnteredAt = Date.now();
+        }
+
         this.currentView = viewName;
-        
+
         // Update navigation active states
         document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
             if (item.getAttribute('data-view') === viewName) {
@@ -344,10 +1104,21 @@ class AppState {
             }
         });
 
+        if (!skipRecord) {
+            this.recordNavEvent('view', viewName, { isClick: true });
+        } else {
+            this.ensureNavUsage().lastView = viewName;
+        }
+
+        if (!this._viewEnteredAt || viewChanged) {
+            this._viewEnteredAt = Date.now();
+        }
+
         // Update topbar title and view controls
         const titleEl = document.getElementById('view-title');
         const searchBox = document.getElementById('global-search-container');
         const tasksControls = document.getElementById('tasks-view-controls');
+        const addTaskBtn = document.getElementById('btn-header-add-task');
         const projectsControls = document.getElementById('projects-view-controls');
         const skillsControls = document.getElementById('skills-view-controls');
 
@@ -356,66 +1127,102 @@ class AppState {
             sec.classList.add('hidden');
         });
 
+        let activeSection = null;
+
         if (viewName === 'tasks') {
             titleEl.textContent = 'Tasks';
             searchBox.classList.remove('hidden');
             tasksControls.classList.remove('hidden');
+            addTaskBtn.classList.remove('hidden');
             projectsControls.classList.add('hidden');
             skillsControls.classList.add('hidden');
-            document.getElementById('view-tasks').classList.remove('hidden');
-            document.getElementById('view-tasks').classList.add('active');
+            activeSection = document.getElementById('view-tasks');
+            activeSection.classList.remove('hidden');
+            activeSection.classList.add('active');
             this.renderTasks();
         } else if (viewName === 'projects') {
             titleEl.textContent = 'Projects';
             searchBox.classList.add('hidden');
             tasksControls.classList.add('hidden');
+            addTaskBtn.classList.add('hidden');
             projectsControls.classList.remove('hidden');
             skillsControls.classList.add('hidden');
-            document.getElementById('view-projects').classList.remove('hidden');
-            document.getElementById('view-projects').classList.add('active');
+            activeSection = document.getElementById('view-projects');
+            activeSection.classList.remove('hidden');
+            activeSection.classList.add('active');
             this.renderProjects();
         } else if (viewName === 'calendar') {
             titleEl.textContent = 'Calendar';
             searchBox.classList.add('hidden');
             tasksControls.classList.add('hidden');
+            addTaskBtn.classList.add('hidden');
             projectsControls.classList.add('hidden');
             skillsControls.classList.add('hidden');
-            document.getElementById('view-calendar').classList.remove('hidden');
-            document.getElementById('view-calendar').classList.add('active');
+            activeSection = document.getElementById('view-calendar');
+            activeSection.classList.remove('hidden');
+            activeSection.classList.add('active');
             this.renderCalendar();
         } else if (viewName === 'skills') {
             titleEl.textContent = 'Skills Folder';
             searchBox.classList.add('hidden');
             tasksControls.classList.add('hidden');
+            addTaskBtn.classList.add('hidden');
             projectsControls.classList.add('hidden');
             skillsControls.classList.remove('hidden');
-            document.getElementById('view-skills').classList.remove('hidden');
-            document.getElementById('view-skills').classList.add('active');
+            activeSection = document.getElementById('view-skills');
+            activeSection.classList.remove('hidden');
+            activeSection.classList.add('active');
             this.renderSkills();
         } else if (viewName === 'daily_report') {
             titleEl.textContent = 'Daily Report';
             searchBox.classList.add('hidden');
             tasksControls.classList.add('hidden');
+            addTaskBtn.classList.add('hidden');
             projectsControls.classList.add('hidden');
             skillsControls.classList.add('hidden');
-            document.getElementById('view-daily-report').classList.remove('hidden');
-            document.getElementById('view-daily-report').classList.add('active');
-            this.renderDailyReport();
+            activeSection = document.getElementById('view-daily-report');
+            activeSection.classList.remove('hidden');
+            activeSection.classList.add('active');
+            this.loadProjectMemory().then(() => this.loadInbox()).then(() => this.renderDailyReport());
+        } else if (viewName === 'inbox') {
+            titleEl.textContent = 'Inbox';
+            searchBox.classList.add('hidden');
+            tasksControls.classList.add('hidden');
+            addTaskBtn.classList.add('hidden');
+            projectsControls.classList.add('hidden');
+            skillsControls.classList.add('hidden');
+            activeSection = document.getElementById('view-inbox');
+            activeSection.classList.remove('hidden');
+            activeSection.classList.add('active');
+            this.loadInbox().then(() => this.renderInbox());
         } else if (viewName === 'agent_runner') {
             titleEl.textContent = 'Agent Runner';
             searchBox.classList.add('hidden');
             tasksControls.classList.add('hidden');
+            addTaskBtn.classList.add('hidden');
             projectsControls.classList.add('hidden');
             skillsControls.classList.add('hidden');
-            document.getElementById('view-agent-runner').classList.remove('hidden');
-            document.getElementById('view-agent-runner').classList.add('active');
+            activeSection = document.getElementById('view-agent-runner');
+            activeSection.classList.remove('hidden');
+            activeSection.classList.add('active');
+            this.staggerChildren(document.querySelector('.agents-grid'), '.agent-card');
         }
+
+        this.animateTitle(titleEl);
+        if (activeSection) {
+            this.animateViewEnter(activeSection);
+            if (viewName === 'daily_report') {
+                document.querySelectorAll('.metric-value').forEach(el => this.popMetric(el));
+            }
+        }
+
+        this.focusGlobalChatInput();
     }
 
     // MAIN RENDER FUNCTION
     render() {
         this.renderSidebar();
-        this.renderProjectFiltersAndSelects();
+        this.renderProjectSelects();
 
         if (this.currentView === 'tasks') {
             this.renderTasks();
@@ -427,53 +1234,21 @@ class AppState {
             this.renderSkills();
         } else if (this.currentView === 'daily_report') {
             this.renderDailyReport();
+        } else if (this.currentView === 'inbox') {
+            this.renderInbox();
         }
     }
 
     renderSidebar() {
-        // Badges count
-        const activeTasks = this.data.tasks.filter(t => t.status !== 'completed').length;
-        const activeProjects = this.data.projects.filter(p => p.status === 'active').length;
-        const totalSkills = (this.data.skills || []).length;
-
-        document.getElementById('badge-tasks').textContent = activeTasks;
-        document.getElementById('badge-projects').textContent = activeProjects;
-        document.getElementById('badge-skills').textContent = totalSkills;
-
-        // Render mini projects list in sidebar
-        const sidebarProjContainer = document.getElementById('sidebar-projects-container');
-        sidebarProjContainer.innerHTML = '';
-        this.data.projects.forEach(p => {
-            const item = document.createElement('a');
-            item.className = 'project-mini-item';
-            item.innerHTML = `
-                <span class="project-dot" style="background-color: ${p.color}"></span>
-                <span>${p.name}</span>
-            `;
-            item.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.switchView('tasks');
-                this.filters.project = p.id;
-                document.getElementById('filter-project').value = p.id;
-                this.renderTasks();
-            });
-            sidebarProjContainer.appendChild(item);
-        });
+        if (!this._sidebarNavBuilt) {
+            this.buildSidebarNav();
+        } else {
+            this.updateNavBadges();
+        }
+        this.renderSidebarProjects();
     }
 
-    renderProjectFiltersAndSelects() {
-        // Filter Select in Tasks View
-        const filterSelect = document.getElementById('filter-project');
-        const currentFilterVal = filterSelect.value;
-        filterSelect.innerHTML = '<option value="all">All Projects</option>';
-        this.data.projects.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.name;
-            filterSelect.appendChild(opt);
-        });
-        filterSelect.value = currentFilterVal || 'all';
-
+    renderProjectSelects() {
         // Modal Task Project Select
         const taskProjSelect = document.getElementById('task-project');
         const currentTaskProjVal = taskProjSelect.value;
@@ -495,18 +1270,20 @@ class AppState {
             listContainer.classList.remove('hidden');
             kanbanContainer.classList.add('hidden');
             this.renderTasksList();
+            this.animateViewEnter(listContainer);
         } else {
             listContainer.classList.add('hidden');
             kanbanContainer.classList.remove('hidden');
             this.renderTasksKanban();
+            this.animateViewEnter(kanbanContainer);
         }
     }
 
     filterTasks() {
         return this.data.tasks.filter(task => {
-            if (this.filters.status !== 'all' && task.status !== this.filters.status) return false;
-            if (this.filters.priority !== 'all' && task.priority !== this.filters.priority) return false;
-            if (this.filters.project !== 'all' && task.projectId !== this.filters.project) return false;
+            if (this.filters.projectId && task.projectId !== this.filters.projectId) {
+                return false;
+            }
             if (this.filters.search) {
                 const query = this.filters.search;
                 const matchTitle = task.title.toLowerCase().includes(query);
@@ -569,8 +1346,9 @@ class AppState {
 
                 // Toggle Checkbox Click
                 card.querySelector('.task-checkbox').addEventListener('click', () => {
+                    card.classList.add('task-completing');
                     task.status = task.status === 'completed' ? 'todo' : 'completed';
-                    this.saveData();
+                    setTimeout(() => this.saveData(), 180);
                 });
 
                 // Edit Task Click
@@ -588,6 +1366,10 @@ class AppState {
         renderSection(todoTasks, 'list-todo');
         renderSection(inprogressTasks, 'list-inprogress');
         renderSection(completedTasks, 'list-completed');
+
+        ['list-todo', 'list-inprogress', 'list-completed'].forEach(id => {
+            this.staggerChildren(document.getElementById(id), '.task-card-list');
+        });
     }
 
     renderTasksKanban() {
@@ -632,13 +1414,13 @@ class AppState {
                 `;
 
                 // Drag Event Listeners
-                card.addEventListener('dragstart', (e) => {
+                card.addEventListener('dragstart', () => {
                     this.draggedTaskId = task.id;
-                    card.style.opacity = '0.5';
+                    card.classList.add('dragging');
                 });
                 card.addEventListener('dragend', () => {
                     this.draggedTaskId = null;
-                    card.style.opacity = '1';
+                    card.classList.remove('dragging');
                 });
 
                 // Edit Click
@@ -656,6 +1438,10 @@ class AppState {
         renderColumn(todoTasks, 'kanban-todo');
         renderColumn(inprogressTasks, 'kanban-inprogress');
         renderColumn(completedTasks, 'kanban-completed');
+
+        ['kanban-todo', 'kanban-inprogress', 'kanban-completed'].forEach(id => {
+            this.staggerChildren(document.getElementById(id), '.kanban-card');
+        });
     }
 
     renderProjects() {
@@ -697,8 +1483,8 @@ class AppState {
                 <div class="project-card-footer">
                     <span>${project.deadline ? `Deadline: ${project.deadline}` : 'No deadline'}</span>
                     <div class="footer-actions">
-                        <button class="btn-icon btn-filter-proj-tasks" title="View Project Tasks">
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                        <button class="btn-icon btn-add-proj-task" title="Add Task">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         </button>
                         <button class="btn-icon btn-edit-proj" title="Edit Project">
                             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -707,15 +1493,10 @@ class AppState {
                 </div>
             `;
 
-            // Filter Project Tasks Click
-            card.querySelector('.btn-filter-proj-tasks').addEventListener('click', () => {
-                this.switchView('tasks');
-                this.filters.project = project.id;
-                document.getElementById('filter-project').value = project.id;
-                this.renderTasks();
+            card.querySelector('.btn-add-proj-task').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.openTaskModal(null, '', project.id);
             });
-
-            // Edit Project Click
             card.querySelector('.btn-edit-proj').addEventListener('click', () => {
                 this.openProjectModal(project);
             });
@@ -725,6 +1506,7 @@ class AppState {
 
             container.appendChild(card);
         });
+        this.staggerChildren(container, '.project-card');
     }
 
     renderSkills() {
@@ -774,28 +1556,124 @@ class AppState {
 
             container.appendChild(card);
         });
+        this.staggerChildren(container, '.skill-card');
+    }
+
+    renderMemoryDigest() {
+        const container = document.getElementById('daily-report-memory-container');
+        if (!container) return;
+
+        const yesterdayIso = this.getYesterdayIso();
+        const newIdeas = this.getMemoryIdeasSince(yesterdayIso);
+        const painPoints = this.getOpenPainPoints();
+        const pendingInbox = this.getPendingInboxCount();
+
+        let html = '';
+
+        if (pendingInbox > 0) {
+            html += `<div class="memory-digest-block warning-block">
+                <strong>Inbox (${pendingInbox} pending)</strong>
+                <p>Items waiting for agent review. Open Inbox or run idea-creator-validator in Cursor.</p>
+            </div>`;
+        }
+
+        if (newIdeas.length > 0) {
+            html += `<div class="memory-digest-block"><strong>New ideas since yesterday</strong><ul>`;
+            newIdeas.forEach(idea => {
+                const verdict = idea.verdict ? ` [${idea.verdict}]` : '';
+                html += `<li>${idea.content}${verdict}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+
+        if (painPoints.length > 0) {
+            html += `<div class="memory-digest-block"><strong>Open blockers</strong><ul>`;
+            painPoints.forEach(p => {
+                html += `<li><span class="badge-priority ${p.status === 'in_progress' ? 'medium' : 'high'}">${p.status}</span> ${p.description}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+
+        if (!html) {
+            html = `<p class="text-muted">No new ideas or open blockers in project memory since yesterday.</p>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    renderInbox() {
+        const container = document.getElementById('inbox-items-container');
+        if (!container) return;
+
+        container.innerHTML = '';
+        const pending = this.inbox.filter(i => i.status === 'pending');
+        const processed = this.inbox.filter(i => i.status === 'processed');
+
+        if (this.inbox.length === 0) {
+            container.innerHTML = `<p class="text-muted">Inbox is empty. Use Quick Add below to capture ideas, notes, or questions.</p>`;
+            return;
+        }
+
+        const renderGroup = (title, items) => {
+            if (items.length === 0) return;
+            const section = document.createElement('div');
+            section.className = 'inbox-section';
+            section.innerHTML = `<h3 class="section-header">${title} (${items.length})</h3>`;
+            const list = document.createElement('div');
+            list.className = 'inbox-list';
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = `inbox-card ${item.status}`;
+                const created = new Date(item.created_at).toLocaleString();
+                card.innerHTML = `
+                    <div class="inbox-card-content">${item.content}</div>
+                    <div class="inbox-card-meta">
+                        <span>${created}</span>
+                        <span class="inbox-status-badge ${item.status}">${item.status}</span>
+                    </div>
+                `;
+                if (item.status === 'pending') {
+                    const actions = document.createElement('div');
+                    actions.className = 'inbox-card-actions';
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-secondary btn-sm';
+                    btn.textContent = 'Mark processed';
+                    btn.addEventListener('click', () => this.markInboxProcessed(item.id));
+                    actions.appendChild(btn);
+                    card.appendChild(actions);
+                }
+                list.appendChild(card);
+            });
+
+            section.appendChild(list);
+            container.appendChild(section);
+        };
+
+        renderGroup('Pending review', pending);
+        renderGroup('Processed', processed);
+        this.staggerChildren(container, '.inbox-card');
     }
 
     renderDailyReport() {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         const dateTitleEl = document.getElementById('daily-report-date-title');
-        
+
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         dateTitleEl.textContent = `Daily Summary — ${today.toLocaleDateString('en-US', options)}`;
 
-        // Metrics Calculation
         const completedCount = this.data.tasks.filter(t => t.status === 'completed').length;
         const pendingCount = this.data.tasks.filter(t => t.status !== 'completed').length;
         const activeProjectsCount = this.data.projects.filter(p => p.status === 'active').length;
-        const skillsCount = (this.data.skills || []).length;
+        const inboxPending = this.getPendingInboxCount();
 
         document.getElementById('metric-completed').textContent = completedCount;
         document.getElementById('metric-pending').textContent = pendingCount;
         document.getElementById('metric-projects').textContent = activeProjectsCount;
-        document.getElementById('metric-skills').textContent = skillsCount;
+        const metricInbox = document.getElementById('metric-inbox');
+        if (metricInbox) metricInbox.textContent = inboxPending;
 
-        // Load Notes
         const notesInput = document.getElementById('daily-notes-input');
         if (this.data.dailyNotes && this.data.dailyNotes[todayStr]) {
             notesInput.value = this.data.dailyNotes[todayStr];
@@ -803,7 +1681,8 @@ class AppState {
             notesInput.value = '';
         }
 
-        // Render Action Items Due Today or Overdue
+        this.renderMemoryDigest();
+
         const tasksContainer = document.getElementById('daily-report-tasks-container');
         tasksContainer.innerHTML = '';
 
@@ -812,11 +1691,11 @@ class AppState {
             if (!t.dueDate) return false;
             const dueTime = new Date(t.dueDate).getTime();
             const todayTime = new Date(todayStr).getTime();
-            return dueTime <= todayTime; // due today or overdue
+            return dueTime <= todayTime;
         });
 
         if (actionTasks.length === 0) {
-            tasksContainer.innerHTML = `<p class="text-muted" style="padding: 1rem 0;">🎉 No urgent or overdue tasks for today! You are all caught up.</p>`;
+            tasksContainer.innerHTML = `<p class="text-muted" style="padding: 1rem 0;">No urgent or overdue tasks for today.</p>`;
             return;
         }
 
@@ -863,6 +1742,7 @@ class AppState {
 
             tasksContainer.appendChild(card);
         });
+        this.staggerChildren(tasksContainer, '.task-card-list');
     }
 
     renderCalendar() {
@@ -873,51 +1753,48 @@ class AppState {
         const year = this.calendarDate.getFullYear();
         const month = this.calendarDate.getMonth();
 
-        // Month Title
         const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         titleEl.textContent = `${monthNames[month]} ${year}`;
 
-        // Get first day of month and total days
-        const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
-        const totalDays = new Date(year, month + 1, 0).getDate();
-        const prevMonthTotalDays = new Date(year, month, 0).getDate();
+        const firstOfMonth = new Date(year, month, 1);
+        const lastOfMonth = new Date(year, month + 1, 0);
 
-        // Calculate total cells needed in grid (multiple of 7)
-        const totalCells = Math.ceil((firstDayIndex + totalDays) / 7) * 7;
+        const start = new Date(firstOfMonth);
+        const startDay = start.getDay();
+        start.setDate(start.getDate() - (startDay === 0 ? 6 : startDay - 1));
+
+        const end = new Date(lastOfMonth);
+        const endDay = end.getDay();
+        if (endDay === 6) end.setDate(end.getDate() - 1);
+        else if (endDay === 0) end.setDate(end.getDate() - 2);
+        else if (endDay !== 5) end.setDate(end.getDate() + (5 - endDay));
 
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-        for (let i = 0; i < totalCells; i++) {
+        const current = new Date(start);
+        while (current <= end) {
+            const dow = current.getDay();
+            if (dow < 1 || dow > 5) {
+                current.setDate(current.getDate() + 1);
+                continue;
+            }
+
+            const cellYear = current.getFullYear();
+            const cellMonth = current.getMonth();
+            const dayNumber = current.getDate();
+            const currentCellDateStr = `${cellYear}-${String(cellMonth + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
+
             const cell = document.createElement('div');
             cell.className = 'calendar-day-cell';
-            
-            let dayNumber;
-            let currentCellDateStr;
-            let isOtherMonth = false;
+            if (cellMonth !== month) {
+                cell.classList.add('other-month');
+            }
 
-            if (i < firstDayIndex) {
-                // Previous month days
-                dayNumber = prevMonthTotalDays - firstDayIndex + i + 1;
-                isOtherMonth = true;
-                cell.classList.add('other-month');
-                const prevM = month === 0 ? 12 : month;
-                const prevY = month === 0 ? year - 1 : year;
-                currentCellDateStr = `${prevY}-${String(prevM).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
-            } else if (i >= firstDayIndex + totalDays) {
-                // Next month days
-                dayNumber = i - (firstDayIndex + totalDays) + 1;
-                isOtherMonth = true;
-                cell.classList.add('other-month');
-                const nextM = month === 11 ? 1 : month + 2;
-                const nextY = month === 11 ? year + 1 : year;
-                currentCellDateStr = `${nextY}-${String(nextM).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
-            } else {
-                // Current month days
-                dayNumber = i - firstDayIndex + 1;
-                currentCellDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
-                if (year === today.getFullYear() && month === today.getMonth() && dayNumber === today.getDate()) {
-                    cell.classList.add('today');
-                }
+            const cellDate = new Date(current);
+            cellDate.setHours(0, 0, 0, 0);
+            if (cellDate.getTime() === today.getTime()) {
+                cell.classList.add('today');
             }
 
             // Day Top Bar (Day number + Add task button)
@@ -936,7 +1813,7 @@ class AppState {
             projectDeadlines.forEach(p => {
                 const pEl = document.createElement('div');
                 pEl.className = 'calendar-event project-deadline';
-                pEl.innerHTML = `🎯 [Deadline] ${p.name}`;
+                pEl.innerHTML = `ðŸŽ¯ [Deadline] ${p.name}`;
                 pEl.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.openProjectModal(p);
@@ -953,7 +1830,7 @@ class AppState {
                 if (project) {
                     tEl.style.borderLeftColor = project.color;
                 }
-                tEl.innerHTML = `☑️ ${t.title}`;
+                tEl.innerHTML = `â˜‘ï¸ ${t.title}`;
                 tEl.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.openTaskModal(t);
@@ -968,14 +1845,16 @@ class AppState {
             });
 
             daysContainer.appendChild(cell);
+            current.setDate(current.getDate() + 1);
         }
+        this.staggerChildren(daysContainer, '.calendar-day-cell');
     }
 
     // AGENT SIMULATION HANDLERS
     appendConsoleLog(text, type = '') {
         const linesContainer = document.getElementById('console-log-lines');
         const line = document.createElement('div');
-        line.className = 'console-line';
+        line.className = 'console-line line-enter';
         const timeStr = new Date().toTimeString().split(' ')[0];
         line.innerHTML = `
             <span class="console-time">[${timeStr}]</span>
@@ -1037,7 +1916,7 @@ class AppState {
         setTimeout(() => this.appendConsoleLog(`[Synthesis] Extracting key metrics: ${this.data.tasks.length} total tasks, ${this.data.projects.length} active projects...`, 'tool'), 2500);
         setTimeout(() => {
             this.appendConsoleLog(`[Synthesis] COMPLETE: Workspace health index is 98.4%. Ready for presentation.`, 'success');
-            alert('🎉 Global Workspace Synthesis complete! All background agents report peak workspace health.');
+            alert('ðŸŽ‰ Global Workspace Synthesis complete! All background agents report peak workspace health.');
         }, 4000);
     }
 
@@ -1050,7 +1929,8 @@ class AppState {
     }
 
     // MODAL OPENERS & HANDLERS
-    openTaskModal(task = null, initialDueDate = '') {
+    openTaskModal(task = null, initialDueDate = '', initialProjectId = '') {
+        this.renderProjectSelects();
         const modal = document.getElementById('modal-task');
         const titleEl = document.getElementById('modal-task-title');
         const deleteBtn = document.getElementById('btn-delete-task');
@@ -1079,13 +1959,13 @@ class AppState {
             idInput.value = '';
             titleInput.value = '';
             descInput.value = '';
-            projectSelect.value = this.filters.project !== 'all' ? this.filters.project : '';
+            projectSelect.value = initialProjectId || '';
             dueInput.value = initialDueDate || '';
             prioritySelect.value = 'medium';
             statusSelect.value = 'todo';
         }
 
-        modal.classList.remove('hidden');
+        this.openModal(modal);
         titleInput.focus();
     }
 
@@ -1125,9 +2005,10 @@ class AppState {
             this.data.tasks.unshift(newTask);
         }
 
-        document.getElementById('modal-task').classList.add('hidden');
+        this.closeModal(document.getElementById('modal-task'));
         this.saveData();
         if (this.currentView === 'daily_report') this.renderDailyReport();
+        this.focusGlobalChatInput();
     }
 
     openProjectModal(project = null) {
@@ -1168,7 +2049,7 @@ class AppState {
             deadlineInput.value = '';
         }
 
-        modal.classList.remove('hidden');
+        this.openModal(modal);
         nameInput.focus();
     }
 
@@ -1208,9 +2089,10 @@ class AppState {
             this.data.projects.push(newProject);
         }
 
-        document.getElementById('modal-project').classList.add('hidden');
+        this.closeModal(document.getElementById('modal-project'));
         this.saveData();
         if (this.currentView === 'daily_report') this.renderDailyReport();
+        this.focusGlobalChatInput();
     }
 
     openSkillModal(skill = null) {
@@ -1242,7 +2124,7 @@ class AppState {
             notesInput.value = '';
         }
 
-        modal.classList.remove('hidden');
+        this.openModal(modal);
         nameInput.focus();
     }
 
@@ -1276,9 +2158,10 @@ class AppState {
             this.data.skills.push(newSkill);
         }
 
-        document.getElementById('modal-skill').classList.add('hidden');
+        this.closeModal(document.getElementById('modal-skill'));
         this.saveData();
         if (this.currentView === 'daily_report') this.renderDailyReport();
+        this.focusGlobalChatInput();
     }
 }
 
@@ -1286,3 +2169,4 @@ class AppState {
 document.addEventListener('DOMContentLoaded', () => {
     window.appState = new AppState();
 });
+

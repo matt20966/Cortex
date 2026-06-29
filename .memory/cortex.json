@@ -1,0 +1,138 @@
+{
+  "project": {
+    "id": "cortex",
+    "name": "Cortex",
+    "description": "Personal AI infrastructure — agents, skills, and automation working together. Dashboard and memory store for a team of AI agents running via Cursor skills and hooks.",
+    "for": "Matt — daily productivity, idea validation, and autonomous agent workflows",
+    "status": "active",
+    "created_at": "2026-06-29T00:00:00.000Z",
+    "updated_at": "2026-06-29T20:37:32.940Z"
+  },
+  "ideas": [
+    {
+      "id": "idea-001",
+      "content": "Build the MVP flywheel: idea capture → validation → memory → daily report",
+      "status": "active",
+      "supersedes": null,
+      "superseded_by": null,
+      "verdict": "build",
+      "created_at": "2026-06-29T00:00:00.000Z"
+    },
+    {
+      "id": "idea-002",
+      "content": "What if cortex auto-routes inbox items to the right agent without manual invocation?",
+      "status": "active",
+      "supersedes": null,
+      "superseded_by": null,
+      "verdict": "validate",
+      "brief": {
+        "summary": "Auto-routing inbox items would reduce manual agent invocation friction but needs a classifier and routing table."
+      },
+      "created_at": "2026-06-29T20:27:19.207Z"
+    }
+  ],
+  "research": [],
+  "decisions": [
+    {
+      "id": "dec-001",
+      "decision": "Use Cursor skills and hooks as the orchestration layer; cortex UI is the dashboard and memory store",
+      "rationale": "Agents run in Cursor/Claude on demand. Cortex does not call LLM APIs directly. Git-tracked JSON at .memory/ is the shared state.",
+      "created_at": "2026-06-29T00:00:00.000Z"
+    },
+    {
+      "id": "dec-002",
+      "decision": "Start with Idea Creator & Validator agent before Coding Agent",
+      "rationale": "Proves capture → reason → persist → surface with minimal dependencies. Coding Agent slots in once ideas pass validation.",
+      "created_at": "2026-06-29T00:00:00.000Z"
+    },
+    {
+      "id": "dec-003",
+      "decision": "Smart sidebar uses Recent + Frequent + More with EWMA scoring in localStorage",
+      "rationale": "Client-side navUsage tracks clicks and capped dwell time per view. Layout uses Recent (last 3), Frequent (EWMA top slots), and collapsed More for overflow. Visual reorder on reload only; scores update live. No server analytics needed.",
+      "created_at": "2026-06-29T21:00:00.000Z"
+    }
+  ],
+  "pain_points": [
+    {
+      "id": "pain-001",
+      "description": "index.html and app.js diverged — inline script was the live app",
+      "status": "resolved",
+      "resolution": "Extracted inline JS to app.js; index.html loads app.js as single source of truth",
+      "created_at": "2026-06-29T00:00:00.000Z",
+      "resolved_at": "2026-06-29T12:00:00.000Z"
+    }
+  ],
+  "links": [],
+  "agent_runs": [
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed with 9 uncommitted change(s)",
+      "status": "success",
+      "action_required": "9 uncommitted file(s) — apply github-commit skill before ending session",
+      "created_at": "2026-06-29T20:37:32.939Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed with 9 uncommitted change(s)",
+      "status": "success",
+      "action_required": "9 uncommitted file(s) — apply github-commit skill before ending session",
+      "created_at": "2026-06-29T20:37:27.303Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Implemented smart adaptive sidebar v2: Recent + Frequent + More nav with EWMA usage tracking",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T21:00:00.000Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T20:35:17.987Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T20:34:31.144Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T20:32:28.381Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T20:32:19.839Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T20:27:44.066Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T20:26:38.884Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-29T20:26:31.711Z"
+    }
+  ]
+}
