@@ -314,10 +314,19 @@
             </section>
 
             <!-- GLOBAL QUICK-ADD INPUT -->
-            <div id="global-chat-bar" class="global-chat-bar">
-                <input type="text" id="global-chat-input" autocomplete="off">
-                <button id="btn-submit-global-chat" class="btn btn-primary">Add</button>
-                <span id="global-chat-feedback" class="global-chat-feedback">Saved to inbox & today's notes</span>
+            <div id="global-chat-wrapper" class="global-chat-wrapper">
+                <div id="question-mode-panel" class="question-mode-panel hidden">
+                    <div class="question-mode-header">
+                        <span class="question-mode-badge">Question mode</span>
+                        <button type="button" id="btn-exit-question-mode" class="btn-icon" title="Exit question mode" aria-label="Exit question mode">&times;</button>
+                    </div>
+                    <div id="question-thread" class="question-thread"></div>
+                </div>
+                <div id="global-chat-bar" class="global-chat-bar">
+                    <input type="text" id="global-chat-input" autocomplete="off">
+                    <button id="btn-submit-global-chat" class="btn btn-primary">Add</button>
+                    <span id="global-chat-feedback" class="global-chat-feedback">Saved to inbox & today's notes</span>
+                </div>
             </div>
         </main>
     </div>

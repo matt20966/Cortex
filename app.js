@@ -95,6 +95,9 @@ class AppState {
         this._viewEnteredAt = null;
         this._sessionDwellByView = {};
         this._navUsageSaveTimer = null;
+        this.questionMode = false;
+        this._lastEmptyEnterAt = 0;
+        this._emptyEnterWindowMs = 400;
 
         this.init();
     }
@@ -821,6 +824,325 @@ class AppState {
         }, 2000);
     }
 
+    enterQuestionMode() {
+        this.questionMode = true;
+        const wrapper = document.getElementById('global-chat-wrapper');
+        const panel = document.getElementById('question-mode-panel');
+        const input = document.getElementById('global-chat-input');
+        const submitBtn = document.getElementById('btn-submit-global-chat');
+        const feedback = document.getElementById('global-chat-feedback');
+
+        if (wrapper) wrapper.classList.add('question-mode-active');
+        if (panel) panel.classList.remove('hidden');
+        if (input) {
+            input.placeholder = 'Ask about tasks, projects, inbox…';
+            input.value = '';
+        }
+        if (submitBtn) submitBtn.textContent = 'Ask';
+        if (feedback) feedback.classList.remove('visible');
+
+        const thread = document.getElementById('question-thread');
+        if (thread && !thread.childElementCount) {
+            this.renderQuestionMessage('assistant', 'Ask me anything about your projects, tasks, inbox, ideas, or blockers.');
+        }
+
+        this.focusGlobalChatInput({ force: true });
+    }
+
+    exitQuestionMode() {
+        this.questionMode = false;
+        this._lastEmptyEnterAt = 0;
+
+        const wrapper = document.getElementById('global-chat-wrapper');
+        const panel = document.getElementById('question-mode-panel');
+        const input = document.getElementById('global-chat-input');
+        const submitBtn = document.getElementById('btn-submit-global-chat');
+        const thread = document.getElementById('question-thread');
+
+        if (wrapper) wrapper.classList.remove('question-mode-active');
+        if (panel) panel.classList.add('hidden');
+        if (input) {
+            input.placeholder = '';
+            input.value = '';
+        }
+        if (submitBtn) submitBtn.textContent = 'Add';
+        if (thread) thread.innerHTML = '';
+
+        this.focusGlobalChatInput({ force: true });
+    }
+
+    handleEmptyEnter() {
+        const now = Date.now();
+        if (now - this._lastEmptyEnterAt < this._emptyEnterWindowMs) {
+            if (this.questionMode) {
+                this.exitQuestionMode();
+            } else {
+                this.enterQuestionMode();
+            }
+            this._lastEmptyEnterAt = 0;
+        } else {
+            this._lastEmptyEnterAt = now;
+        }
+    }
+
+    renderQuestionMessage(role, content) {
+        const thread = document.getElementById('question-thread');
+        if (!thread) return null;
+
+        const msg = document.createElement('div');
+        msg.className = `question-message ${role}`;
+        msg.textContent = content;
+        thread.appendChild(msg);
+        thread.scrollTop = thread.scrollHeight;
+        return msg;
+    }
+
+    async submitQuestion(text) {
+        const input = document.getElementById('global-chat-input');
+        this.renderQuestionMessage('user', text);
+        if (input) input.value = '';
+
+        const loadingEl = this.renderQuestionMessage('assistant', 'Thinking…');
+        if (loadingEl) loadingEl.classList.add('loading');
+
+        const answer = await this.answerQuestion(text);
+
+        if (loadingEl) {
+            loadingEl.classList.remove('loading');
+            loadingEl.textContent = answer;
+        }
+
+        const thread = document.getElementById('question-thread');
+        if (thread) thread.scrollTop = thread.scrollHeight;
+        this.focusGlobalChatInput({ force: true });
+    }
+
+    buildSiteContext() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        return {
+            tasks: this.data.tasks || [],
+            projects: this.data.projects || [],
+            skills: this.data.skills || [],
+            dailyNotes: {
+                today: (this.data.dailyNotes && this.data.dailyNotes[todayStr]) || '',
+                yesterday: (this.data.dailyNotes && this.data.dailyNotes[yesterdayStr]) || ''
+            },
+            inboxPending: this.inbox.filter(i => i.status === 'pending'),
+            ideas: this.projectMemory?.ideas || [],
+            painPoints: this.getOpenPainPoints(),
+            decisions: this.projectMemory?.decisions || [],
+            agentRuns: (this.projectMemory?.agent_runs || []).slice(0, 5),
+            todayStr
+        };
+    }
+
+    matchQuestionIntent(question) {
+        const q = question.toLowerCase();
+        const intents = [];
+
+        if (/\b(help|what can you|what do you)\b/.test(q)) intents.push('help');
+        if (/\b(task|todo|overdue|completed)\b/.test(q)) intents.push('tasks');
+        if (/\bproject/.test(q)) intents.push('projects');
+        if (/\b(inbox|pending|captured)\b/.test(q)) intents.push('inbox');
+        if (/\b(idea|research)\b/.test(q)) intents.push('ideas');
+        if (/\b(blocker|pain|stuck|blocking)\b/.test(q)) intents.push('blockers');
+        if (/\b(note|today|logged|journal)\b/.test(q)) intents.push('notes');
+        if (/\b(focus|priority|priorities|what should i)\b/.test(q)) intents.push('focus');
+        if (/\bskill/.test(q)) intents.push('skills');
+
+        if (!intents.length) intents.push('overview');
+        return intents;
+    }
+
+    ruleBasedAnswer(question, context) {
+        const q = question.toLowerCase();
+        const intents = this.matchQuestionIntent(question);
+        const sections = [];
+
+        for (const intent of intents) {
+            const section = this.formatIntentAnswer(intent, q, context);
+            if (section) sections.push(section);
+        }
+
+        if (sections.length === 1) return sections[0];
+
+        return sections.join('\n\n');
+    }
+
+    formatIntentAnswer(intent, q, context) {
+        const { tasks, projects, skills, dailyNotes, inboxPending, ideas, painPoints, todayStr } = context;
+        const todayTime = new Date(todayStr).getTime();
+
+        switch (intent) {
+            case 'help':
+                return [
+                    'I can answer questions about:',
+                    '• Tasks — pending, overdue, completed',
+                    '• Projects — active and all projects',
+                    '• Inbox — pending captures',
+                    '• Ideas & blockers — from project memory',
+                    '• Daily notes — today and yesterday',
+                    '• Focus — suggested priorities for today',
+                    '• Skills — your skills folder',
+                    '',
+                    'Try: "What tasks are overdue?" or "What should I focus on?"'
+                ].join('\n');
+
+            case 'tasks': {
+                const isOverdue = /\boverdue\b/.test(q);
+                const isCompleted = /\bcompleted\b/.test(q);
+                const isPending = /\b(pending|todo|in progress)\b/.test(q);
+
+                let filtered = tasks;
+                if (isOverdue) {
+                    filtered = tasks.filter(t => {
+                        if (t.status === 'completed' || !t.dueDate) return false;
+                        return new Date(t.dueDate).getTime() < todayTime;
+                    });
+                } else if (isCompleted) {
+                    filtered = tasks.filter(t => t.status === 'completed');
+                } else if (isPending) {
+                    filtered = tasks.filter(t => t.status !== 'completed');
+                } else {
+                    filtered = tasks.filter(t => t.status !== 'completed');
+                }
+
+                if (!filtered.length) {
+                    if (isOverdue) return 'No overdue tasks — you\'re on track.';
+                    if (isCompleted) return 'No completed tasks yet.';
+                    return 'No tasks found. Add one from the Tasks view.';
+                }
+
+                const label = isOverdue ? 'Overdue tasks' : isCompleted ? 'Completed tasks' : 'Open tasks';
+                const lines = filtered.map(t => {
+                    const project = this.getProjectForTask(t.projectId);
+                    const projectTag = project ? ` [${project.name}]` : '';
+                    const due = t.dueDate ? ` — due ${t.dueDate}` : '';
+                    return `• ${t.title} (${t.status}${t.priority ? ', ' + t.priority : ''})${projectTag}${due}`;
+                });
+                return `${label} (${filtered.length}):\n${lines.join('\n')}`;
+            }
+
+            case 'projects': {
+                const activeOnly = /\bactive\b/.test(q);
+                const filtered = activeOnly
+                    ? projects.filter(p => p.status === 'active')
+                    : projects;
+
+                if (!filtered.length) {
+                    return activeOnly ? 'No active projects.' : 'No projects yet. Add one from the Projects view.';
+                }
+
+                const label = activeOnly ? 'Active projects' : 'All projects';
+                const lines = filtered.map(p => {
+                    const deadline = p.deadline ? ` — deadline ${p.deadline}` : '';
+                    return `• ${p.name} (${p.status || 'active'})${deadline}`;
+                });
+                return `${label} (${filtered.length}):\n${lines.join('\n')}`;
+            }
+
+            case 'inbox': {
+                if (!inboxPending.length) return 'Inbox is empty — nothing pending.';
+                const lines = inboxPending.slice(0, 5).map(i => `• ${i.content}`);
+                const more = inboxPending.length > 5 ? `\n…and ${inboxPending.length - 5} more` : '';
+                return `Inbox (${inboxPending.length} pending):\n${lines.join('\n')}${more}`;
+            }
+
+            case 'ideas': {
+                const activeIdeas = ideas.filter(i => i.status !== 'replaced' && i.status !== 'abandoned');
+                if (!activeIdeas.length) return 'No ideas in project memory yet.';
+                const lines = activeIdeas.map(i => {
+                    const verdict = i.verdict ? ` [${i.verdict}]` : '';
+                    return `• ${i.content}${verdict}`;
+                });
+                return `Ideas (${activeIdeas.length}):\n${lines.join('\n')}`;
+            }
+
+            case 'blockers': {
+                if (!painPoints.length) return 'No open blockers — nothing blocking you right now.';
+                const lines = painPoints.map(p => `• [${p.status}] ${p.description}`);
+                return `Open blockers (${painPoints.length}):\n${lines.join('\n')}`;
+            }
+
+            case 'notes': {
+                const parts = [];
+                if (dailyNotes.today) {
+                    parts.push(`Today's notes:\n${dailyNotes.today}`);
+                } else {
+                    parts.push('No notes logged for today.');
+                }
+                if (/\byesterday\b/.test(q) && dailyNotes.yesterday) {
+                    parts.push(`Yesterday's notes:\n${dailyNotes.yesterday}`);
+                }
+                return parts.join('\n\n');
+            }
+
+            case 'focus': {
+                const overdue = tasks.filter(t => {
+                    if (t.status === 'completed' || !t.dueDate) return false;
+                    return new Date(t.dueDate).getTime() <= todayTime;
+                });
+                const inProgress = tasks.filter(t => t.status === 'in_progress');
+                const activeProjects = projects.filter(p => p.status === 'active');
+                const parts = [];
+
+                if (overdue.length) {
+                    parts.push(`Urgent: ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''} — ${overdue.map(t => t.title).join(', ')}`);
+                }
+                if (inProgress.length) {
+                    parts.push(`In progress: ${inProgress.map(t => t.title).join(', ')}`);
+                }
+                if (painPoints.length) {
+                    parts.push(`Blockers: ${painPoints.map(p => p.description).join('; ')}`);
+                }
+                if (inboxPending.length) {
+                    parts.push(`Inbox: ${inboxPending.length} item${inboxPending.length > 1 ? 's' : ''} waiting to be processed`);
+                }
+                if (activeProjects.length) {
+                    parts.push(`Active projects: ${activeProjects.map(p => p.name).join(', ')}`);
+                }
+
+                if (!parts.length) {
+                    return 'Nothing urgent flagged. Review your task list or capture a new idea in Quick Add.';
+                }
+                return `Suggested focus for today:\n${parts.map(p => `• ${p}`).join('\n')}`;
+            }
+
+            case 'skills': {
+                if (!skills.length) return 'Skills folder is empty.';
+                const lines = skills.map(s => `• ${s.name}${s.description ? ' — ' + s.description : ''}`);
+                return `Skills (${skills.length}):\n${lines.join('\n')}`;
+            }
+
+            case 'overview':
+            default: {
+                const openTasks = tasks.filter(t => t.status !== 'completed').length;
+                const activeProjects = projects.filter(p => p.status === 'active').length;
+                const parts = [
+                    `Overview as of ${todayStr}:`,
+                    `• ${openTasks} open task${openTasks !== 1 ? 's' : ''}`,
+                    `• ${activeProjects} active project${activeProjects !== 1 ? 's' : ''}`,
+                    `• ${inboxPending.length} inbox item${inboxPending.length !== 1 ? 's' : ''} pending`,
+                    `• ${painPoints.length} open blocker${painPoints.length !== 1 ? 's' : ''}`,
+                    `• ${ideas.filter(i => i.status !== 'replaced' && i.status !== 'abandoned').length} active idea${ideas.length !== 1 ? 's' : ''}`,
+                    '',
+                    'Try asking: "What tasks are overdue?", "What\'s in my inbox?", or "What should I focus on?"'
+                ];
+                return parts.join('\n');
+            }
+        }
+    }
+
+    async answerQuestion(question) {
+        if (!this.projectMemory) await this.loadProjectMemory();
+        const context = this.buildSiteContext();
+        return this.ruleBasedAnswer(question, context);
+    }
+
     shouldPreserveFocusTarget(target) {
         if (!target || !target.closest) return true;
         if (target.closest('.modal-overlay:not(.hidden)')) return true;
@@ -1050,11 +1372,33 @@ class AppState {
             globalChatInput.value = '';
             this.focusGlobalChatInput({ force: true });
         };
-        document.getElementById('btn-submit-global-chat').addEventListener('click', submitGlobalChat);
+        const handleGlobalChatSubmit = async () => {
+            const text = globalChatInput.value.trim();
+            if (!text) return;
+            if (this.questionMode) {
+                await this.submitQuestion(text);
+            } else {
+                await submitGlobalChat();
+            }
+        };
+        document.getElementById('btn-submit-global-chat').addEventListener('click', handleGlobalChatSubmit);
+        document.getElementById('btn-exit-question-mode').addEventListener('click', () => {
+            this.exitQuestionMode();
+        });
         globalChatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.questionMode) {
+                e.preventDefault();
+                this.exitQuestionMode();
+                return;
+            }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                submitGlobalChat();
+                const text = globalChatInput.value.trim();
+                if (!text) {
+                    this.handleEmptyEnter();
+                    return;
+                }
+                handleGlobalChatSubmit();
             }
         });
         this.setupGlobalChatFocus();
