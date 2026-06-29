@@ -1,6 +1,14 @@
 {
   "items": [
     {
+      "id": "inbox-1782766247519",
+      "content": "test routing 1782766247516",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-29T20:50:47.519Z"
+    },
+    {
       "id": "inbox-1782764828832",
       "content": "What if cortex auto-routes inbox items to the right agent without manual invocation?",
       "status": "processed",
