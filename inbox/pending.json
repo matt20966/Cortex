@@ -1,6 +1,21 @@
 {
   "items": [
     {
+      "id": "inbox-1782841423805",
+      "content": "Agent building idea: Have agents communicate to each other via json",
+      "status": "pending",
+      "created_at": "2026-06-30T17:43:43.806Z"
+    },
+    {
+      "id": "inbox-1782841408894",
+      "content": "test routing 1782841408890",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T17:43:28.894Z",
+      "processed_at": null
+    },
+    {
       "id": "inbox-1782841153008",
       "content": "test routing 1782841153005",
       "status": "pending",
