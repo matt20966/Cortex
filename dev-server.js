@@ -3,16 +3,47 @@ const fs = require('fs');
 const path = require('path');
 const { classifyInboxContent } = require('./lib/router');
 const { validate } = require('./lib/validate');
-const { readJsonFile, writeJsonFile, enqueueItem } = require('./lib/store');
+const { readJsonFile } = require('./lib/store');
+const {
+  createDb,
+  createDefaultDashboard,
+  getDashboard,
+  saveDashboard,
+  getInbox,
+  addInboxItem,
+  updateInboxItem,
+  getQueue,
+  addQueueItem,
+  updateQueueItem,
+  getProjectMemory,
+  saveProjectMemory
+} = require('./lib/db');
 
 const rootDir = __dirname;
 const port = Number(process.env.PORT || 3000);
 
+let _dbBundle = null;
+
+function ensureDb(options = {}) {
+  if (options.db) {
+    return { db: options.db, paths: options.paths };
+  }
+  if (!_dbBundle) {
+    _dbBundle = createDb(rootDir, {
+      dbPath: process.env.CORTEX_DB_PATH || undefined
+    });
+  }
+  return _dbBundle;
+}
+
+function resetDbForTests() {
+  if (_dbBundle?.db) {
+    _dbBundle.db.close();
+  }
+  _dbBundle = null;
+}
+
 const paths = {
-  memory: path.join(rootDir, '.memory', 'cortex.json'),
-  inbox: path.join(rootDir, 'inbox', 'pending.json'),
-  queue: path.join(rootDir, 'queue', 'pending.json'),
-  dashboard: path.join(rootDir, '.memory', 'dashboard.json'),
   digest: path.join(rootDir, 'digests', 'latest.json'),
   registry: path.join(rootDir, 'agents', 'registry.json')
 };
@@ -55,19 +86,26 @@ function readBody(req) {
   });
 }
 
-function pushToQueue(inboxItem) {
+function pushToQueue(inboxItem, dbBundle) {
   if (!inboxItem.target_agent) return null;
-  return enqueueItem(paths.queue, {
+  const item = {
+    id: `queue-${Date.now()}`,
     inbox_id: inboxItem.id,
     target_agent: inboxItem.target_agent,
     route: inboxItem.route,
-    content: inboxItem.content
-  });
+    content: inboxItem.content,
+    status: 'pending',
+    created_at: new Date().toISOString(),
+    processed_at: null
+  };
+  return addQueueItem(dbBundle.db, item, dbBundle.paths);
 }
 
-function handleApi(req, res, urlPath) {
+function handleApi(req, res, urlPath, dbBundle) {
+  const { db } = dbBundle;
+  const storePaths = dbBundle.paths;
   if (req.method === 'GET' && urlPath === '/api/memory/cortex') {
-    const memory = readJsonFile(paths.memory, null);
+    const memory = getProjectMemory(db);
     if (!memory) {
       sendJson(res, 404, { error: 'Project memory not found' });
       return true;
@@ -84,19 +122,18 @@ function handleApi(req, res, urlPath) {
           sendJson(res, 400, { error: 'Schema validation failed', details: result.errors });
           return;
         }
-        if (body.project) {
-          body.project.updated_at = new Date().toISOString();
-        }
-        writeJsonFile(paths.memory, body);
-        sendJson(res, 200, body);
+        const saved = saveProjectMemory(db, body, storePaths);
+        sendJson(res, 200, saved);
       })
       .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
     return true;
   }
 
   if (req.method === 'GET' && urlPath === '/api/dashboard') {
-    const dashboard = readJsonFile(paths.dashboard, null);
-    sendJson(res, 200, dashboard || { theme: 'light-theme', dailyNotes: {}, projects: [], skills: [], tasks: [] });
+    const dashboard = getDashboard(db);
+    sendJson(res, 200, Object.keys(dashboard.dailyNotes || {}).length || dashboard.tasks.length || dashboard.projects.length
+      ? dashboard
+      : { ...createDefaultDashboard(), ...dashboard });
     return true;
   }
 
@@ -108,17 +145,15 @@ function handleApi(req, res, urlPath) {
           sendJson(res, 400, { error: 'Schema validation failed', details: result.errors });
           return;
         }
-        body.updated_at = new Date().toISOString();
-        writeJsonFile(paths.dashboard, body);
-        sendJson(res, 200, body);
+        const saved = saveDashboard(db, body, { paths: storePaths });
+        sendJson(res, 200, saved);
       })
       .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
     return true;
   }
 
   if (req.method === 'GET' && urlPath === '/api/queue') {
-    const queue = readJsonFile(paths.queue, { items: [] });
-    sendJson(res, 200, queue);
+    sendJson(res, 200, getQueue(db));
     return true;
   }
 
@@ -160,8 +195,7 @@ function handleApi(req, res, urlPath) {
 
   if (urlPath === '/api/inbox') {
     if (req.method === 'GET') {
-      const inbox = readJsonFile(paths.inbox, { items: [] });
-      sendJson(res, 200, inbox);
+      sendJson(res, 200, getInbox(db));
       return true;
     }
 
@@ -175,23 +209,20 @@ function handleApi(req, res, urlPath) {
           }
 
           const classified = classifyInboxContent(content);
-          const inbox = readJsonFile(paths.inbox, { items: [] });
-          if (!Array.isArray(inbox.items)) inbox.items = [];
-
           const item = {
             id: `inbox-${Date.now()}`,
             content: classified.content,
             status: 'pending',
             route: classified.route,
             target_agent: classified.target_agent,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            processed_at: null
           };
-          inbox.items.unshift(item);
-          writeJsonFile(paths.inbox, inbox);
+          addInboxItem(db, item, storePaths);
 
           let queueItem = null;
           if (classified.target_agent) {
-            queueItem = pushToQueue(item);
+            queueItem = pushToQueue(item, dbBundle);
           }
 
           sendJson(res, 201, { ...item, queue_item: queueItem });
@@ -204,18 +235,11 @@ function handleApi(req, res, urlPath) {
     if (req.method === 'PATCH' && patchMatch) {
       readBody(req)
         .then((body) => {
-          const inbox = readJsonFile(paths.inbox, { items: [] });
-          const item = (inbox.items || []).find((entry) => entry.id === patchMatch[1]);
+          const item = updateInboxItem(db, patchMatch[1], body, storePaths);
           if (!item) {
             sendJson(res, 404, { error: 'Inbox item not found' });
             return;
           }
-
-          if (body.status) item.status = body.status;
-          if (body.status === 'processed') {
-            item.processed_at = new Date().toISOString();
-          }
-          writeJsonFile(paths.inbox, inbox);
           sendJson(res, 200, item);
         })
         .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
@@ -227,17 +251,11 @@ function handleApi(req, res, urlPath) {
   if (req.method === 'PATCH' && queuePatch) {
     readBody(req)
       .then((body) => {
-        const queue = readJsonFile(paths.queue, { items: [] });
-        const item = (queue.items || []).find((entry) => entry.id === queuePatch[1]);
+        const item = updateQueueItem(db, queuePatch[1], body, storePaths);
         if (!item) {
           sendJson(res, 404, { error: 'Queue item not found' });
           return;
         }
-        if (body.status) item.status = body.status;
-        if (body.status === 'processed') {
-          item.processed_at = new Date().toISOString();
-        }
-        writeJsonFile(paths.queue, queue);
         sendJson(res, 200, item);
       })
       .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
@@ -263,12 +281,14 @@ function sendFile(res, filePath) {
   });
 }
 
-function createServer() {
+function createServer(options = {}) {
+  const dbBundle = ensureDb(options);
+
   return http.createServer((req, res) => {
     const urlPath = (req.url || '/').split('?')[0];
 
     if (urlPath.startsWith('/api/')) {
-      if (handleApi(req, res, urlPath)) return;
+      if (handleApi(req, res, urlPath, dbBundle)) return;
       sendJson(res, 404, { error: 'API route not found' });
       return;
     }
@@ -329,4 +349,11 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { createServer, paths, readJsonFile, writeJsonFile, classifyInboxContent };
+module.exports = {
+  createServer,
+  paths,
+  ensureDb,
+  resetDbForTests,
+  readJsonFile,
+  classifyInboxContent
+};

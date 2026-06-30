@@ -1,1 +1,7 @@
 node_modules/
+.memory/cortex.db
+.memory/cortex.db-wal
+.memory/cortex.db-shm
+.memory/cortex.db
+.memory/cortex.db-wal
+.memory/cortex.db-shm

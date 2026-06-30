@@ -7,7 +7,9 @@
   "navUsage": {
     "lastView": "tasks",
     "recentViews": [],
-    "pins": ["tasks"],
+    "pins": [
+      "tasks"
+    ],
     "views": {},
     "projects": {},
     "moreExpanded": false,

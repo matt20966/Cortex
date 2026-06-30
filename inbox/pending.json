@@ -1,12 +1,22 @@
 {
   "items": [
     {
+      "id": "inbox-1782804313228",
+      "content": "test routing 1782804313225",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T07:25:13.228Z",
+      "processed_at": null
+    },
+    {
       "id": "inbox-1782804233162",
       "content": "test routing 1782804233158",
       "status": "pending",
       "route": "idea",
       "target_agent": "idea-creator-validator",
-      "created_at": "2026-06-30T07:23:53.162Z"
+      "created_at": "2026-06-30T07:23:53.162Z",
+      "processed_at": null
     },
     {
       "id": "inbox-1782804205138",
@@ -14,7 +24,8 @@
       "status": "pending",
       "route": "idea",
       "target_agent": "idea-creator-validator",
-      "created_at": "2026-06-30T07:23:25.138Z"
+      "created_at": "2026-06-30T07:23:25.138Z",
+      "processed_at": null
     },
     {
       "id": "inbox-1782766247519",
@@ -22,12 +33,15 @@
       "status": "pending",
       "route": "idea",
       "target_agent": "idea-creator-validator",
-      "created_at": "2026-06-29T20:50:47.519Z"
+      "created_at": "2026-06-29T20:50:47.519Z",
+      "processed_at": null
     },
     {
       "id": "inbox-1782764828832",
       "content": "What if cortex auto-routes inbox items to the right agent without manual invocation?",
       "status": "processed",
+      "route": null,
+      "target_agent": null,
       "created_at": "2026-06-29T20:27:08.833Z",
       "processed_at": "2026-06-29T20:27:19.208Z"
     }
