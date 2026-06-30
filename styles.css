@@ -152,6 +152,8 @@ body {
     position: relative;
     z-index: 30;
     overflow: hidden;
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
 }
 
 .sidebar-slot:hover,
@@ -167,16 +169,17 @@ body {
     height: 100%;
     background-color: var(--bg-sidebar);
     border-right: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sidebar);
+    box-shadow: none;
     display: flex;
     flex-direction: column;
-    padding: 1.125rem 0.875rem 1.5rem;
-    clip-path: inset(0 calc(100% - var(--sidebar-width-collapsed)) 0 0);
+    padding: 1rem 0.875rem 1.5rem;
+    clip-path: inset(0 220px 0 0);
     pointer-events: none;
     transition:
         clip-path var(--sidebar-expand-duration) var(--ease-out-expo),
         box-shadow var(--sidebar-expand-duration) ease,
-        border-color var(--sidebar-expand-duration) ease;
+        border-color var(--sidebar-expand-duration) ease,
+        padding var(--sidebar-expand-duration) var(--ease-out-expo);
 }
 
 .sidebar-slot:hover .sidebar,
@@ -185,6 +188,13 @@ body {
     box-shadow: var(--shadow-lg);
     border-right-color: transparent;
     pointer-events: auto;
+    padding: 1.125rem 0.875rem 1.5rem;
+}
+
+.sidebar-slot:not(:hover):not(:focus-within) .sidebar {
+    pointer-events: auto;
+    background-color: transparent;
+    border-right-color: transparent;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -246,9 +256,9 @@ body {
     width: 36px;
     height: 36px;
     border-radius: var(--radius-md);
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #3730a3 100%);
-    background-size: 200% 200%;
-    color: #ffffff;
+    background: var(--bg-input);
+    color: var(--primary);
+    border: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -257,13 +267,20 @@ body {
     transition:
         width var(--sidebar-expand-duration) var(--ease-out-expo),
         height var(--sidebar-expand-duration) var(--ease-out-expo),
-        box-shadow var(--sidebar-expand-duration) ease;
+        box-shadow var(--sidebar-expand-duration) ease,
+        background var(--sidebar-expand-duration) ease,
+        border-color var(--sidebar-expand-duration) ease,
+        color var(--sidebar-expand-duration) ease;
 }
 
 .sidebar-slot:hover .brand-icon,
 .sidebar-slot:focus-within .brand-icon {
     width: 42px;
     height: 42px;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #3730a3 100%);
+    background-size: 200% 200%;
+    color: #ffffff;
+    border-color: transparent;
     box-shadow: 0 4px 12px rgba(79, 70, 229, 0.28);
 }
 
@@ -279,15 +296,28 @@ body {
     }
 }
 
-/* Collapsed rail: compact icon buttons, no purple pill bleed */
+.sidebar-slot:not(:hover):not(:focus-within) .nav-group-label {
+    display: none;
+}
+
+.sidebar-slot:not(:hover):not(:focus-within) .sidebar-nav,
+.sidebar-slot:not(:hover):not(:focus-within) .nav-group {
+    align-items: center;
+    width: 100%;
+}
+
+/* Collapsed rail: centered icon tiles, no badges or purple fills */
 .sidebar-slot:hover .nav-item,
 .sidebar-slot:focus-within .nav-item {
     width: auto;
+    height: auto;
     min-width: 0;
+    max-width: none;
     margin-left: 0;
     padding: 0.625rem 0.75rem;
     justify-content: flex-start;
     gap: 0.75rem;
+    overflow: visible;
 }
 
 .sidebar-slot:hover .nav-more-toggle,
@@ -302,26 +332,27 @@ body {
     gap: 0.625rem;
 }
 
-.sidebar-slot:not(:hover):not(:focus-within) .sidebar {
-    pointer-events: auto;
-}
-
 .sidebar-slot:not(:hover):not(:focus-within) .nav-item,
 .sidebar-slot:not(:hover):not(:focus-within) .nav-more-toggle,
 .sidebar-slot:not(:hover):not(:focus-within) .project-more-toggle {
-    width: 36px;
-    min-width: 36px;
-    margin-left: 2px;
-    margin-right: auto;
-    padding: 0.5rem;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    margin: 0 auto;
+    padding: 0;
     justify-content: center;
+    align-items: center;
     gap: 0;
     box-shadow: none;
+    overflow: hidden;
+    flex-shrink: 0;
+    align-self: center;
 }
 
 .sidebar-slot:not(:hover):not(:focus-within) .nav-item.active {
-    background: var(--primary-soft);
-    color: var(--primary);
+    background: transparent;
+    color: var(--text-main);
     box-shadow: none;
     animation: none;
 }
@@ -329,11 +360,11 @@ body {
 .sidebar-slot:not(:hover):not(:focus-within) .nav-item.active::before {
     content: '';
     position: absolute;
-    left: -6px;
+    left: -8px;
     top: 50%;
     transform: translateY(-50%);
     width: 3px;
-    height: 18px;
+    height: 20px;
     border-radius: 0 3px 3px 0;
     background: var(--primary);
 }
@@ -343,22 +374,21 @@ body {
     color: var(--primary);
 }
 
-.sidebar-slot:not(:hover):not(:focus-within) .nav-item .badge:not(.hidden) {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    min-width: 6px;
-    width: 6px;
-    height: 6px;
-    padding: 0;
-    font-size: 0;
-    color: transparent;
-    border-radius: 50%;
-    background-color: var(--primary);
+.sidebar-slot:not(:hover):not(:focus-within) .sidebar-nav {
+    margin-bottom: 1rem;
 }
 
-.sidebar-slot:not(:hover):not(:focus-within) .nav-item.active .badge:not(.hidden) {
-    background-color: var(--primary);
+.sidebar-slot:not(:hover):not(:focus-within) .nav-item svg {
+    margin: 0;
+}
+
+.sidebar-slot:not(:hover):not(:focus-within) .nav-item .badge {
+    display: none !important;
+}
+
+.sidebar-slot:not(:hover):not(:focus-within) .nav-item:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-main);
 }
 
 .sidebar-slot:not(:hover):not(:focus-within) .sidebar-projects-list,
