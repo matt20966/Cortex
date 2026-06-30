@@ -6,7 +6,7 @@
     "for": "Matt — daily productivity, idea validation, and autonomous agent workflows",
     "status": "active",
     "created_at": "2026-06-29T00:00:00.000Z",
-    "updated_at": "2026-06-30T07:32:22.892Z"
+    "updated_at": "2026-06-30T17:35:35.259Z"
   },
   "ideas": [
     {
@@ -64,6 +64,20 @@
   ],
   "links": [],
   "agent_runs": [
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed with 2 uncommitted change(s)",
+      "status": "success",
+      "action_required": "2 uncommitted file(s) — apply github-commit skill before ending session",
+      "created_at": "2026-06-30T17:35:35.243Z"
+    },
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed",
+      "status": "success",
+      "action_required": null,
+      "created_at": "2026-06-30T07:33:04.925Z"
+    },
     {
       "agent": "cursor-agent",
       "summary": "Agent session completed",
