@@ -4,6 +4,7 @@ const path = require('path');
 const { classifyInboxContent } = require('./lib/router');
 const { validate } = require('./lib/validate');
 const { readJsonFile } = require('./lib/store');
+const { listCursorSkills } = require('./lib/skills-registry');
 const {
   createDb,
   createDefaultDashboard,
@@ -160,6 +161,11 @@ function handleApi(req, res, urlPath, dbBundle) {
   if (req.method === 'GET' && urlPath === '/api/agents/registry') {
     const registry = readJsonFile(paths.registry, { agents: [] });
     sendJson(res, 200, registry);
+    return true;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/skills/registry') {
+    sendJson(res, 200, { skills: listCursorSkills(rootDir) });
     return true;
   }
 

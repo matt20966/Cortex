@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": "inbox-1782804716506",
+      "content": "test routing 1782804716502",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T07:31:56.506Z",
+      "processed_at": null
+    },
+    {
+      "id": "inbox-1782804708522",
+      "content": "test routing 1782804708519",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T07:31:48.522Z",
+      "processed_at": null
+    },
+    {
+      "id": "inbox-1782804686902",
+      "content": "test routing 1782804686897",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T07:31:26.902Z",
+      "processed_at": null
+    },
+    {
+      "id": "inbox-1782804445626",
+      "content": "test routing 1782804445624",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T07:27:25.626Z",
+      "processed_at": null
+    },
+    {
       "id": "inbox-1782804397297",
       "content": "test routing 1782804397295",
       "status": "pending",

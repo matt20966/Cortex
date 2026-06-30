@@ -87,6 +87,7 @@ class AppState {
         this.projectMemory = null;
         this.inbox = [];
         this.agentRegistry = [];
+        this.cursorSkillRegistry = [];
         this.agentQueue = [];
         this.latestDigest = null;
         this._sidebarNavBuilt = false;
@@ -321,6 +322,18 @@ class AppState {
             }
         } catch (e) {
             console.warn('Could not load agent registry:', e);
+        }
+    }
+
+    async loadCursorSkillRegistry() {
+        try {
+            const res = await fetch('/api/skills/registry');
+            if (res.ok) {
+                const data = await res.json();
+                this.cursorSkillRegistry = Array.isArray(data.skills) ? data.skills : [];
+            }
+        } catch (e) {
+            console.warn('Could not load cursor skill registry:', e);
         }
     }
 
@@ -612,6 +625,7 @@ class AppState {
         a.className = 'nav-item';
         if (this.currentView === viewId) a.classList.add('active');
         a.setAttribute('data-view', viewId);
+        a.setAttribute('title', item.label);
 
         let badgeHtml = '';
         if (item.badgeId) {
@@ -703,7 +717,7 @@ class AppState {
         const counts = {
             'badge-tasks': this.data.tasks.filter(t => t.status !== 'completed').length,
             'badge-projects': this.data.projects.filter(p => p.status === 'active').length,
-            'badge-skills': (this.data.skills || []).length,
+            'badge-skills': (this.cursorSkillRegistry || []).length + (this.data.skills || []).length,
             'badge-inbox': this.getPendingInboxCount()
         };
 
@@ -748,6 +762,7 @@ class AppState {
         item.className = 'project-mini-item';
         if (this.filters.projectId === project.id) item.classList.add('active');
         item.setAttribute('data-project-id', project.id);
+        item.setAttribute('title', project.name);
         item.innerHTML = `
             <span class="project-dot" style="background-color: ${project.color}"></span>
             <span>${project.name}</span>
@@ -1208,9 +1223,18 @@ class AppState {
             }
 
             case 'skills': {
-                if (!skills.length) return 'Skills folder is empty.';
-                const lines = skills.map(s => `• ${s.name}${s.description ? ' — ' + s.description : ''}`);
-                return `Skills (${skills.length}):\n${lines.join('\n')}`;
+                const cursorSkills = this.cursorSkillRegistry || [];
+                if (!cursorSkills.length && !skills.length) {
+                    return 'No Cursor agent skills or knowledge entries found. Open the Skills view in the sidebar.';
+                }
+                const parts = [];
+                if (cursorSkills.length) {
+                    parts.push(`Cursor agent skills (${cursorSkills.length}):\n${cursorSkills.map(s => `• ${s.name} — ${s.invocation}`).join('\n')}`);
+                }
+                if (skills.length) {
+                    parts.push(`Knowledge base (${skills.length}):\n${skills.map(s => `• ${s.name}${s.description ? ' — ' + s.description : ''}`).join('\n')}`);
+                }
+                return parts.join('\n\n');
             }
 
             case 'overview':
@@ -1285,6 +1309,7 @@ class AppState {
             this.loadProjectMemory(),
             this.loadInbox(),
             this.loadAgentRegistry(),
+            this.loadCursorSkillRegistry(),
             this.loadQueue(),
             this.loadLatestDigest()
         ]).then(() => {
@@ -1700,7 +1725,7 @@ class AppState {
             activeSection = document.getElementById('view-skills');
             activeSection.classList.remove('hidden');
             activeSection.classList.add('active');
-            this.renderSkills();
+            this.loadCursorSkillRegistry().then(() => this.renderSkills());
         } else if (viewName === 'daily_report') {
             titleEl.textContent = 'Daily Report';
             searchBox.classList.add('hidden');
@@ -2046,50 +2071,107 @@ class AppState {
         const container = document.getElementById('skills-grid-container');
         container.innerHTML = '';
 
-        if (!this.data.skills || this.data.skills.length === 0) {
-            container.innerHTML = `<p class="text-muted">No skills created yet. Click "New Skill" above to build your skills folder.</p>`;
-            return;
+        if (this.cursorSkillRegistry.length > 0) {
+            const cursorSection = document.createElement('div');
+            cursorSection.className = 'skills-section';
+            cursorSection.innerHTML = `
+                <h3 class="section-header">Cursor Agent Skills</h3>
+                <p class="text-muted skills-section-desc">From <code>.cursor/skills/</code> — copy an invocation and paste into Cursor chat.</p>
+            `;
+            const cursorGrid = document.createElement('div');
+            cursorGrid.className = 'skills-grid-inner';
+
+            this.cursorSkillRegistry.forEach(skill => {
+                const card = document.createElement('div');
+                card.className = 'agent-card skill-invoke-card';
+                card.innerHTML = `
+                    <div class="agent-card-header">
+                        <div class="agent-title-group">
+                            <h3 class="agent-card-title">${skill.name}</h3>
+                        </div>
+                        ${skill.invoke_only ? '<span class="agent-status-badge idle">Invoke only</span>' : ''}
+                    </div>
+                    <p class="agent-card-desc">${skill.description || 'No description'}</p>
+                    <div class="agent-card-footer">
+                        <span class="agent-model-tag">${skill.id}</span>
+                        <button class="btn btn-secondary btn-copy-skill-invocation" data-skill-id="${skill.id}">Copy invocation</button>
+                    </div>
+                `;
+                card.querySelector('.btn-copy-skill-invocation').addEventListener('click', () => {
+                    this.copySkillInvocation(skill.id);
+                });
+                cursorGrid.appendChild(card);
+            });
+
+            cursorSection.appendChild(cursorGrid);
+            container.appendChild(cursorSection);
         }
 
-        this.data.skills.forEach(skill => {
-            const card = document.createElement('div');
-            card.className = 'skill-card';
-            
-            card.innerHTML = `
-                <div class="skill-card-header">
-                    <div class="skill-title-group">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="color: var(--primary);"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                        <h3 class="skill-card-title">${skill.name}</h3>
-                    </div>
-                    <span class="skill-level-badge ${skill.level}">${skill.level}</span>
-                </div>
-                ${skill.description ? `<div class="skill-card-desc">${skill.description}</div>` : ''}
-                ${skill.notes ? `
-                <div class="skill-notes-box">
-                    <strong>Notes & Resources:</strong><br>
-                    ${skill.notes}
-                </div>` : ''}
-                <div class="skill-card-footer">
-                    <span>Folder Category: Knowledge Base</span>
-                    <div class="footer-actions">
-                        <button class="btn-icon btn-edit-skill" title="Edit Skill Folder">
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                        </button>
-                    </div>
-                </div>
-            `;
+        const knowledgeSection = document.createElement('div');
+        knowledgeSection.className = 'skills-section';
+        knowledgeSection.innerHTML = `
+            <h3 class="section-header">Knowledge Base</h3>
+            <p class="text-muted skills-section-desc">Personal reference notes — not Cursor agent skills.</p>
+        `;
+        const knowledgeGrid = document.createElement('div');
+        knowledgeGrid.className = 'skills-grid-inner';
 
-            // Edit Skill Click
-            card.querySelector('.btn-edit-skill').addEventListener('click', () => {
-                this.openSkillModal(skill);
-            });
-            card.querySelector('.skill-card-title').addEventListener('click', () => {
-                this.openSkillModal(skill);
-            });
+        if (!this.data.skills || this.data.skills.length === 0) {
+            knowledgeGrid.innerHTML = `<p class="text-muted">No knowledge entries yet. Click "New Skill" above to add one.</p>`;
+        } else {
+            this.data.skills.forEach(skill => {
+                const card = document.createElement('div');
+                card.className = 'skill-card';
+                
+                card.innerHTML = `
+                    <div class="skill-card-header">
+                        <div class="skill-title-group">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="color: var(--primary);"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            <h3 class="skill-card-title">${skill.name}</h3>
+                        </div>
+                        <span class="skill-level-badge ${skill.level}">${skill.level}</span>
+                    </div>
+                    ${skill.description ? `<div class="skill-card-desc">${skill.description}</div>` : ''}
+                    ${skill.notes ? `
+                    <div class="skill-notes-box">
+                        <strong>Notes & Resources:</strong><br>
+                        ${skill.notes}
+                    </div>` : ''}
+                    <div class="skill-card-footer">
+                        <span>Folder Category: Knowledge Base</span>
+                        <div class="footer-actions">
+                            <button class="btn-icon btn-edit-skill" title="Edit Skill Folder">
+                                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
 
-            container.appendChild(card);
-        });
-        this.staggerChildren(container, '.skill-card');
+                card.querySelector('.btn-edit-skill').addEventListener('click', () => {
+                    this.openSkillModal(skill);
+                });
+                card.querySelector('.skill-card-title').addEventListener('click', () => {
+                    this.openSkillModal(skill);
+                });
+
+                knowledgeGrid.appendChild(card);
+            });
+        }
+
+        knowledgeSection.appendChild(knowledgeGrid);
+        container.appendChild(knowledgeSection);
+        this.staggerChildren(container, '.skill-card, .skill-invoke-card');
+    }
+
+    async copySkillInvocation(skillId) {
+        const skill = this.cursorSkillRegistry.find(s => s.id === skillId);
+        if (!skill) return;
+        try {
+            await navigator.clipboard.writeText(skill.invocation);
+            this.showGlobalChatFeedback('Skill invocation copied');
+        } catch (e) {
+            console.warn('Could not copy skill invocation:', e);
+        }
     }
 
     renderAgentDigest() {

@@ -108,6 +108,15 @@ describe('dev-server API', () => {
     assert.ok(res.body.agents.length >= 2);
   });
 
+  it('GET /api/skills/registry lists cursor skills', async () => {
+    const res = await request(port, 'GET', '/api/skills/registry');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.skills));
+    const dailyCompact = res.body.skills.find((s) => s.id === 'daily-compact');
+    assert.ok(dailyCompact, 'daily-compact skill should be listed');
+    assert.ok(dailyCompact.invocation.includes('daily-compact'));
+  });
+
   it('POST /api/inbox routes idea: prefix', async () => {
     const res = await request(port, 'POST', '/api/inbox', {
       content: `idea: test routing ${Date.now()}`
