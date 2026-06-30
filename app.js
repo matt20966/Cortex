@@ -97,6 +97,7 @@ class AppState {
         this._sessionDwellByView = {};
         this._navUsageSaveTimer = null;
         this.questionMode = false;
+        this.llmConfigured = false;
         this._lastEmptyEnterAt = 0;
         this._emptyEnterWindowMs = 400;
 
@@ -857,7 +858,55 @@ class AppState {
         this.render();
     }
 
-    async addQuickNote(text) {
+    async loadChatStatus() {
+        try {
+            const res = await fetch('/api/chat/status');
+            if (res.ok) {
+                const data = await res.json();
+                this.llmConfigured = Boolean(data.configured);
+            }
+        } catch {
+            this.llmConfigured = false;
+        }
+    }
+
+    async applyChatRefresh(refreshKeys) {
+        if (!Array.isArray(refreshKeys) || !refreshKeys.length) return;
+        const tasks = [];
+        if (refreshKeys.includes('dashboard')) {
+            tasks.push(this.loadDashboard().then(() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const notesInput = document.getElementById('daily-notes-input');
+                if (notesInput && this.data.dailyNotes?.[todayStr] != null) {
+                    notesInput.value = this.data.dailyNotes[todayStr];
+                }
+            }));
+        }
+        if (refreshKeys.includes('memory')) tasks.push(this.loadProjectMemory());
+        if (refreshKeys.includes('inbox')) tasks.push(this.loadInbox());
+        if (refreshKeys.includes('queue')) tasks.push(this.loadQueue());
+        await Promise.all(tasks);
+        this.renderSidebar();
+        if (this.currentView === 'inbox') this.renderInbox();
+        if (this.currentView === 'daily_report') this.renderDailyReport();
+        if (this.currentView === 'tasks') this.renderTasks();
+        if (this.currentView === 'projects') this.renderProjects();
+    }
+
+    getQuestionThreadHistory() {
+        const thread = document.getElementById('question-thread');
+        if (!thread) return [];
+        const messages = [];
+        for (const el of thread.querySelectorAll('.question-message')) {
+            if (el.classList.contains('loading')) continue;
+            const role = el.classList.contains('user') ? 'user' : 'assistant';
+            const content = el.textContent?.trim();
+            if (content) messages.push({ role, content });
+        }
+        return messages.slice(-12);
+    }
+
+    async addQuickNoteLegacy(text) {
         const todayStr = new Date().toISOString().split('T')[0];
         const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
         if (!this.data.dailyNotes) this.data.dailyNotes = {};
@@ -872,6 +921,32 @@ class AppState {
         await this.addToInbox(text);
         await this.persistDashboard();
         this.showGlobalChatFeedback('Saved to inbox & today\'s notes');
+    }
+
+    async addQuickNote(text) {
+        if (this.llmConfigured) {
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: 'capture', message: text })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (!data.fallback) {
+                        await this.applyChatRefresh(data.refresh);
+                        const feedback = data.text
+                            || (data.actions?.length ? data.actions.map((a) => a.summary).join(' · ') : null)
+                            || 'Saved';
+                        this.showGlobalChatFeedback(feedback);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('LLM capture failed, using fallback:', e);
+            }
+        }
+        await this.addQuickNoteLegacy(text);
     }
 
     showGlobalChatFeedback(message = 'Saved to inbox & today\'s notes') {
@@ -1271,6 +1346,29 @@ class AppState {
     }
 
     async answerQuestion(question) {
+        if (this.llmConfigured) {
+            try {
+                let messages = this.getQuestionThreadHistory();
+                const last = messages[messages.length - 1];
+                if (last?.role === 'user' && last.content === question) {
+                    messages = messages.slice(0, -1);
+                }
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: 'question', message: question, messages })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (!data.fallback && data.text) {
+                        if (data.refresh?.length) await this.applyChatRefresh(data.refresh);
+                        return data.text;
+                    }
+                }
+            } catch (e) {
+                console.warn('LLM question failed, using rule-based fallback:', e);
+            }
+        }
         if (!this.projectMemory) await this.loadProjectMemory();
         const context = this.buildSiteContext();
         return this.ruleBasedAnswer(question, context);
@@ -1325,7 +1423,8 @@ class AppState {
             this.loadAgentRegistry(),
             this.loadCursorSkillRegistry(),
             this.loadQueue(),
-            this.loadLatestDigest()
+            this.loadLatestDigest(),
+            this.loadChatStatus()
         ]).then(() => {
             this._sidebarNavBuilt = false;
             this._sidebarProjectsBuilt = false;

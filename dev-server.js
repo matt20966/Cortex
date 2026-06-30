@@ -1,7 +1,11 @@
+require('dotenv').config();
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { classifyInboxContent } = require('./lib/router');
+const { getChatStatus } = require('./lib/openrouter');
+const { runAssistant } = require('./lib/assistant');
 const { validate } = require('./lib/validate');
 const { readJsonFile } = require('./lib/store');
 const { listCursorSkills, writeSkillsRegistry } = require('./lib/skills-registry');
@@ -188,6 +192,32 @@ function handleApi(req, res, urlPath, dbBundle) {
       return true;
     }
     sendJson(res, 200, digest);
+    return true;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/chat/status') {
+    sendJson(res, 200, getChatStatus());
+    return true;
+  }
+
+  if (req.method === 'POST' && urlPath === '/api/chat') {
+    readBody(req)
+      .then(async (body) => {
+        const mode = body.mode === 'question' ? 'question' : 'capture';
+        const message = (body.message || '').trim();
+        if (!message) {
+          sendJson(res, 400, { error: 'message is required' });
+          return;
+        }
+        const result = await runAssistant({
+          mode,
+          message,
+          messages: body.messages,
+          dbBundle
+        });
+        sendJson(res, 200, result);
+      })
+      .catch(() => sendJson(res, 400, { error: 'Invalid JSON body' }));
     return true;
   }
 

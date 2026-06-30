@@ -1,6 +1,36 @@
 {
   "items": [
     {
+      "id": "queue-1782846179490",
+      "inbox_id": "inbox-1782846179488",
+      "target_agent": "idea-creator-validator",
+      "route": "idea",
+      "content": "test routing 1782846179483",
+      "status": "pending",
+      "created_at": "2026-06-30T19:02:59.490Z",
+      "processed_at": null
+    },
+    {
+      "id": "queue-1782846130552",
+      "inbox_id": "inbox-1782846130549",
+      "target_agent": "idea-creator-validator",
+      "route": "idea",
+      "content": "test routing 1782846130544",
+      "status": "pending",
+      "created_at": "2026-06-30T19:02:10.552Z",
+      "processed_at": null
+    },
+    {
+      "id": "queue-1782845936116",
+      "inbox_id": "inbox-1782845936109",
+      "target_agent": "idea-creator-validator",
+      "route": "idea",
+      "content": "test routing 1782845936101",
+      "status": "pending",
+      "created_at": "2026-06-30T18:58:56.116Z",
+      "processed_at": null
+    },
+    {
       "id": "queue-1782841796187",
       "inbox_id": "inbox-1782841796186",
       "target_agent": "idea-creator-validator",

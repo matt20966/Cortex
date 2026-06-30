@@ -6,7 +6,7 @@
     "for": "Matt — daily productivity, idea validation, and autonomous agent workflows",
     "status": "active",
     "created_at": "2026-06-29T00:00:00.000Z",
-    "updated_at": "2026-06-30T18:58:35.722Z"
+    "updated_at": "2026-06-30T19:02:42.699Z"
   },
   "ideas": [
     {
@@ -50,6 +50,12 @@
       "decision": "Smart sidebar uses Recent + Frequent + More with EWMA scoring in localStorage",
       "rationale": "Client-side navUsage tracks clicks and capped dwell time per view. Layout uses Recent (last 3), Frequent (EWMA top slots), and collapsed More for overflow. Visual reorder on reload only; scores update live. No server analytics needed.",
       "created_at": "2026-06-29T21:00:00.000Z"
+    },
+    {
+      "id": "dec-004",
+      "decision": "Cortex dev-server calls OpenRouter for global-chat capture routing and Q&A",
+      "rationale": "Quick Add and question mode use server-side OpenRouter with function-calling tools to route captures to tasks, memory, inbox, or daily notes. API key stays server-side only; Cursor agents remain the orchestration layer for heavy agent work. Rule-based fallbacks apply when OpenRouter is unavailable.",
+      "created_at": "2026-06-30T19:30:00.000Z"
     }
   ],
   "pain_points": [
@@ -64,6 +70,13 @@
   ],
   "links": [],
   "agent_runs": [
+    {
+      "agent": "cursor-agent",
+      "summary": "Agent session completed with 15 uncommitted change(s)",
+      "status": "success",
+      "action_required": "15 uncommitted file(s) — apply github-commit skill before ending session",
+      "created_at": "2026-06-30T19:02:42.697Z"
+    },
     {
       "agent": "cursor-agent",
       "summary": "Agent session completed with 2 uncommitted change(s)",

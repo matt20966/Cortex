@@ -169,4 +169,122 @@ describe('dev-server API', () => {
     assert.equal(getRes.body.tasks[0].title, 'Persist me');
     assert.equal(getRes.body.projects[0].name, 'API Project');
   });
+
+  it('GET /api/chat/status reports configuration', async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+    delete require.cache[require.resolve('../lib/openrouter')];
+
+    const res = await request(port, 'GET', '/api/chat/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.configured, false);
+    assert.equal(res.body.model, 'openrouter/free');
+
+    if (savedKey) process.env.OPENROUTER_API_KEY = savedKey;
+    delete require.cache[require.resolve('../lib/openrouter')];
+  });
+
+  it('POST /api/chat returns fallback when not configured', async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+    delete require.cache[require.resolve('../lib/openrouter')];
+    delete require.cache[require.resolve('../lib/assistant')];
+
+    const res = await request(port, 'POST', '/api/chat', {
+      mode: 'capture',
+      message: 'remember to buy milk'
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.fallback, true);
+
+    if (savedKey) process.env.OPENROUTER_API_KEY = savedKey;
+    delete require.cache[require.resolve('../lib/openrouter')];
+    delete require.cache[require.resolve('../lib/assistant')];
+  });
+});
+
+describe('cortex-tools', () => {
+  let dbBundle;
+
+  before(() => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cortex-tools-'));
+    const { createDb } = require('../lib/db');
+    dbBundle = createDb(tmpDir, { dbPath: path.join(tmpDir, 'tools-test.db') });
+  });
+
+  after(() => {
+    dbBundle.db.close();
+  });
+
+  it('add_task writes to dashboard', () => {
+    const { executeTool } = require('../lib/cortex-tools');
+    const { getDashboard } = require('../lib/db');
+    const ctx = { db: dbBundle.db, paths: dbBundle.paths };
+    const result = executeTool(ctx, 'add_task', {
+      title: 'Tool test task',
+      priority: 'high'
+    });
+    assert.equal(result.ok, true);
+    assert.ok(result.summary.includes('Tool test task'));
+
+    const dashboard = getDashboard(dbBundle.db);
+    assert.equal(dashboard.tasks[0].title, 'Tool test task');
+    assert.equal(dashboard.tasks[0].priority, 'high');
+  });
+});
+
+describe('assistant', () => {
+  it('runs capture with mocked OpenRouter tool call', async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    delete require.cache[require.resolve('../lib/openrouter')];
+    delete require.cache[require.resolve('../lib/assistant')];
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cortex-asst-'));
+    const { createDb, getDashboard } = require('../lib/db');
+    const dbBundle = createDb(tmpDir, { dbPath: path.join(tmpDir, 'asst-test.db') });
+    const { runAssistant } = require('../lib/assistant');
+
+    let callCount = 0;
+    const chatCompletion = async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{
+              id: 'call_test_1',
+              type: 'function',
+              function: {
+                name: 'add_task',
+                arguments: JSON.stringify({ title: 'Mocked LLM task' })
+              }
+            }]
+          }
+        };
+      }
+      return { message: { role: 'assistant', content: 'Task added.' } };
+    };
+
+    const result = await runAssistant({
+      mode: 'capture',
+      message: 'add a task to review docs',
+      dbBundle,
+      chatCompletion
+    });
+
+    assert.equal(result.fallback, undefined);
+    assert.equal(result.provider, 'openrouter');
+    assert.ok(result.actions?.some((a) => a.tool === 'add_task'));
+
+    const dashboard = getDashboard(dbBundle.db);
+    assert.equal(dashboard.tasks[0].title, 'Mocked LLM task');
+    dbBundle.db.close();
+
+    if (savedKey) process.env.OPENROUTER_API_KEY = savedKey;
+    else delete process.env.OPENROUTER_API_KEY;
+    delete require.cache[require.resolve('../lib/openrouter')];
+    delete require.cache[require.resolve('../lib/assistant')];
+  });
 });
