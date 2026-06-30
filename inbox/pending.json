@@ -1,6 +1,22 @@
 {
   "items": [
     {
+      "id": "inbox-1782804233162",
+      "content": "test routing 1782804233158",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T07:23:53.162Z"
+    },
+    {
+      "id": "inbox-1782804205138",
+      "content": "test routing 1782804205135",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T07:23:25.138Z"
+    },
+    {
       "id": "inbox-1782766247519",
       "content": "test routing 1782766247516",
       "status": "pending",
