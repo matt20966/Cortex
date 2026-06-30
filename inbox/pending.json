@@ -1,6 +1,33 @@
 {
   "items": [
     {
+      "id": "inbox-1782845936109",
+      "content": "test routing 1782845936101",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T18:58:56.109Z",
+      "processed_at": null
+    },
+    {
+      "id": "inbox-1782845055700",
+      "content": "Start learning theory test",
+      "status": "pending",
+      "route": null,
+      "target_agent": null,
+      "created_at": "2026-06-30T18:44:15.700Z",
+      "processed_at": null
+    },
+    {
+      "id": "inbox-1782845050168",
+      "content": "Start preparing for house move",
+      "status": "pending",
+      "route": null,
+      "target_agent": null,
+      "created_at": "2026-06-30T18:44:10.169Z",
+      "processed_at": null
+    },
+    {
       "id": "inbox-1782841796186",
       "content": "test routing 1782841796183",
       "status": "pending",
