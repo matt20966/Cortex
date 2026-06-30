@@ -1709,6 +1709,37 @@ body {
     gap: 0.625rem;
 }
 
+.question-message-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
+    max-width: 90%;
+    align-self: flex-start;
+}
+
+.question-message-wrap .question-message {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+}
+
+.question-copy-btn {
+    flex-shrink: 0;
+    margin-top: 0.35rem;
+    opacity: 0.55;
+    transition: opacity var(--transition), color var(--transition), background-color var(--transition);
+}
+
+.question-message-wrap:hover .question-copy-btn,
+.question-copy-btn:focus-visible,
+.question-copy-btn.copied {
+    opacity: 1;
+}
+
+.question-copy-btn.copied {
+    color: var(--status-completed);
+}
+
 .question-message {
     max-width: 85%;
     padding: 0.625rem 0.875rem;
@@ -1727,7 +1758,7 @@ body {
 }
 
 .question-message.assistant {
-    align-self: flex-start;
+    align-self: auto;
     background: var(--bg-input);
     color: var(--text-main);
     border: 1px solid var(--border-color);

@@ -885,16 +885,81 @@ class AppState {
         }
     }
 
-    renderQuestionMessage(role, content) {
+    renderQuestionMessage(role, content, { loading = false } = {}) {
         const thread = document.getElementById('question-thread');
         if (!thread) return null;
 
         const msg = document.createElement('div');
         msg.className = `question-message ${role}`;
+        if (loading) msg.classList.add('loading');
         msg.textContent = content;
-        thread.appendChild(msg);
+
+        if (role === 'assistant' && !loading) {
+            const wrap = document.createElement('div');
+            wrap.className = 'question-message-wrap assistant';
+            wrap.appendChild(msg);
+            this.attachQuestionCopyButton(wrap, msg);
+            thread.appendChild(wrap);
+        } else {
+            thread.appendChild(msg);
+        }
+
         thread.scrollTop = thread.scrollHeight;
         return msg;
+    }
+
+    attachQuestionCopyButton(wrap, msgEl) {
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'btn-icon-small question-copy-btn';
+        copyBtn.title = 'Copy response';
+        copyBtn.setAttribute('aria-label', 'Copy response');
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.copyQuestionResponse(msgEl.textContent, copyBtn);
+        });
+        wrap.appendChild(copyBtn);
+    }
+
+    finalizeAssistantMessage(msgEl, content) {
+        if (!msgEl) return;
+        msgEl.classList.remove('loading');
+        msgEl.textContent = content;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'question-message-wrap assistant';
+        const parent = msgEl.parentNode;
+        parent.insertBefore(wrap, msgEl);
+        wrap.appendChild(msgEl);
+        this.attachQuestionCopyButton(wrap, msgEl);
+    }
+
+    async copyQuestionResponse(text, btnEl) {
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            if (btnEl) {
+                btnEl.classList.add('copied');
+                btnEl.title = 'Copied!';
+                setTimeout(() => {
+                    btnEl.classList.remove('copied');
+                    btnEl.title = 'Copy response';
+                }, 2000);
+            }
+        } catch {
+            if (btnEl) btnEl.title = 'Copy failed';
+        }
     }
 
     async submitQuestion(text) {
@@ -902,14 +967,12 @@ class AppState {
         this.renderQuestionMessage('user', text);
         if (input) input.value = '';
 
-        const loadingEl = this.renderQuestionMessage('assistant', 'Thinking…');
-        if (loadingEl) loadingEl.classList.add('loading');
+        const loadingEl = this.renderQuestionMessage('assistant', 'Thinking…', { loading: true });
 
         const answer = await this.answerQuestion(text);
 
         if (loadingEl) {
-            loadingEl.classList.remove('loading');
-            loadingEl.textContent = answer;
+            this.finalizeAssistantMessage(loadingEl, answer);
         }
 
         const thread = document.getElementById('question-thread');
