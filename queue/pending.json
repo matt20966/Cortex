@@ -1,6 +1,16 @@
 {
   "items": [
     {
+      "id": "queue-1782804747267",
+      "inbox_id": "inbox-1782804747266",
+      "target_agent": "idea-creator-validator",
+      "route": "idea",
+      "content": "test routing 1782804747264",
+      "status": "pending",
+      "created_at": "2026-06-30T07:32:27.267Z",
+      "processed_at": null
+    },
+    {
       "id": "queue-1782804716507",
       "inbox_id": "inbox-1782804716506",
       "target_agent": "idea-creator-validator",
