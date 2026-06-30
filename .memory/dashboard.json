@@ -1,9 +1,26 @@
 {
   "theme": "light-theme",
-  "dailyNotes": {},
-  "projects": [],
+  "dailyNotes": {
+    "2026-06-30": "Daily reflection note"
+  },
+  "projects": [
+    {
+      "id": "proj-api",
+      "name": "API Project",
+      "status": "active",
+      "color": "#22c55e"
+    }
+  ],
   "skills": [],
-  "tasks": [],
+  "tasks": [
+    {
+      "id": "task-api",
+      "title": "Persist me",
+      "status": "todo",
+      "priority": "medium",
+      "projectId": "proj-api"
+    }
+  ],
   "navUsage": {
     "lastView": "tasks",
     "recentViews": [],
@@ -16,5 +33,5 @@
     "moreProjectsExpanded": false,
     "totalEvents": 0
   },
-  "updated_at": "2026-06-29T00:00:00.000Z"
+  "updated_at": "2026-06-30T07:26:37.318Z"
 }

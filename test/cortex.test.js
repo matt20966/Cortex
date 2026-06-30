@@ -1,7 +1,9 @@
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const http = require('http');
-const { createServer } = require('../dev-server');
 const { classifyInboxContent } = require('../lib/router');
 const { validate } = require('../lib/validate');
 
@@ -73,13 +75,26 @@ describe('validate', () => {
 describe('dev-server API', () => {
   let server;
   let port;
+  let tmpDir;
+  let createServer;
 
   before(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cortex-api-'));
+    process.env.CORTEX_DB_PATH = path.join(tmpDir, 'api-test.db');
+    delete require.cache[require.resolve('../dev-server')];
+    ({ createServer, resetDbForTests } = require('../dev-server'));
     server = createServer();
     port = await listen(server);
   });
 
-  after(() => new Promise((resolve) => server.close(resolve)));
+  after(() => new Promise((resolve) => {
+    server.close(() => {
+      resetDbForTests();
+      delete process.env.CORTEX_DB_PATH;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      resolve();
+    });
+  }));
 
   it('GET /api/memory/cortex', async () => {
     const res = await request(port, 'GET', '/api/memory/cortex');
@@ -101,5 +116,34 @@ describe('dev-server API', () => {
     assert.equal(res.body.route, 'idea');
     assert.equal(res.body.target_agent, 'idea-creator-validator');
     assert.ok(res.body.queue_item);
+  });
+
+  it('PUT /api/dashboard persists notes and tasks to sqlite', async () => {
+    const payload = {
+      theme: 'light-theme',
+      dailyNotes: { '2026-06-30': 'Daily reflection note' },
+      projects: [{ id: 'proj-api', name: 'API Project', status: 'active', color: '#22c55e' }],
+      skills: [],
+      tasks: [{ id: 'task-api', title: 'Persist me', status: 'todo', priority: 'medium', projectId: 'proj-api' }],
+      navUsage: {
+        lastView: 'tasks',
+        recentViews: [],
+        pins: ['tasks'],
+        views: {},
+        projects: {},
+        moreExpanded: false,
+        moreProjectsExpanded: false,
+        totalEvents: 0
+      }
+    };
+    const putRes = await request(port, 'PUT', '/api/dashboard', payload);
+    assert.equal(putRes.status, 200);
+    assert.ok(putRes.body.updated_at);
+
+    const getRes = await request(port, 'GET', '/api/dashboard');
+    assert.equal(getRes.status, 200);
+    assert.equal(getRes.body.dailyNotes['2026-06-30'], 'Daily reflection note');
+    assert.equal(getRes.body.tasks[0].title, 'Persist me');
+    assert.equal(getRes.body.projects[0].name, 'API Project');
   });
 });

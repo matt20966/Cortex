@@ -245,38 +245,68 @@ class AppState {
     }
 
     async loadDashboard() {
+        let apiData = null;
         try {
             const res = await fetch('/api/dashboard');
-            if (!res.ok) return;
-            const apiData = await res.json();
-            if (apiData.updated_at || (apiData.tasks && apiData.tasks.length) || (apiData.projects && apiData.projects.length)) {
-                this.data = this.normalizeData(apiData);
-                return;
-            }
+            if (res.ok) apiData = await res.json();
         } catch (e) {
             console.warn('Could not load dashboard from API:', e);
         }
+
+        let localData = null;
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             try {
                 const parsed = JSON.parse(stored);
                 if (!this.isLegacySampleData(parsed)) {
-                    this.data = this.normalizeData(parsed);
-                    await this.persistDashboard();
+                    localData = this.normalizeData(parsed);
                 }
             } catch (e) {
-                console.warn('Could not migrate localStorage dashboard:', e);
+                console.warn('Could not parse localStorage dashboard:', e);
             }
         }
+
+        if (apiData) {
+            const normalizedApi = this.normalizeData(apiData);
+            if (localData) {
+                const apiTime = apiData.updated_at ? Date.parse(apiData.updated_at) : 0;
+                const localTime = localData.updated_at ? Date.parse(localData.updated_at) : 0;
+                this.data = localTime > apiTime ? localData : normalizedApi;
+                if (localTime > apiTime) {
+                    await this.persistDashboard();
+                }
+            } else {
+                this.data = normalizedApi;
+            }
+        } else if (localData) {
+            this.data = localData;
+            await this.persistDashboard();
+        }
+
+        this.cacheLocally();
+    }
+
+    cacheLocally() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+    }
+
+    schedulePersist(delayMs = 400) {
+        clearTimeout(this._persistTimer);
+        this._persistTimer = setTimeout(() => this.persistDashboard(), delayMs);
     }
 
     async persistDashboard() {
         try {
-            await fetch('/api/dashboard', {
+            const res = await fetch('/api/dashboard', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(this.data)
             });
+            if (res.ok) {
+                const saved = await res.json();
+                if (saved.updated_at) this.data.updated_at = saved.updated_at;
+                this.cacheLocally();
+            }
         } catch (e) {
             console.warn('Could not persist dashboard:', e);
         }
@@ -426,7 +456,8 @@ class AppState {
     saveNavUsage() {
         clearTimeout(this._navUsageSaveTimer);
         this._navUsageSaveTimer = setTimeout(() => {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+            this.cacheLocally();
+            this.schedulePersist(0);
         }, 300);
     }
 
@@ -792,8 +823,8 @@ class AppState {
     }
 
     saveData() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
-        this.persistDashboard();
+        this.cacheLocally();
+        this.schedulePersist(0);
         this.render();
     }
 
@@ -808,8 +839,9 @@ class AppState {
         const notesInput = document.getElementById('daily-notes-input');
         if (notesInput) notesInput.value = this.data.dailyNotes[todayStr];
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+        this.cacheLocally();
         await this.addToInbox(text);
+        await this.persistDashboard();
         this.showGlobalChatFeedback('Saved to inbox & today\'s notes');
     }
 
@@ -1423,7 +1455,8 @@ class AppState {
             const todayStr = new Date().toISOString().split('T')[0];
             if (!this.data.dailyNotes) this.data.dailyNotes = {};
             this.data.dailyNotes[todayStr] = e.target.value;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+            this.cacheLocally();
+            this.schedulePersist();
         });
 
         // Global Quick-Add Input
