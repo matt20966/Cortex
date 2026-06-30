@@ -4,7 +4,7 @@ const path = require('path');
 const { classifyInboxContent } = require('./lib/router');
 const { validate } = require('./lib/validate');
 const { readJsonFile } = require('./lib/store');
-const { listCursorSkills } = require('./lib/skills-registry');
+const { listCursorSkills, writeSkillsRegistry } = require('./lib/skills-registry');
 const {
   createDb,
   createDefaultDashboard,
@@ -165,7 +165,19 @@ function handleApi(req, res, urlPath, dbBundle) {
   }
 
   if (req.method === 'GET' && urlPath === '/api/skills/registry') {
-    sendJson(res, 200, { skills: listCursorSkills(rootDir) });
+    const skills = listCursorSkills(rootDir);
+    try {
+      writeSkillsRegistry(rootDir);
+    } catch (err) {
+      console.warn('Could not write skills/registry.json:', err.message);
+    }
+    sendJson(res, 200, { skills });
+    return true;
+  }
+
+  if (req.method === 'GET' && urlPath === '/skills/registry.json') {
+    const snapshot = readJsonFile(path.join(rootDir, 'skills', 'registry.json'), { skills: [] });
+    sendJson(res, 200, snapshot);
     return true;
   }
 
@@ -326,6 +338,11 @@ function createServer(options = {}) {
 }
 
 function startServer() {
+  try {
+    writeSkillsRegistry(rootDir);
+  } catch (err) {
+    console.warn('Could not write skills/registry.json on startup:', err.message);
+  }
   server = createServer();
   server.listen(port, () => {
     console.log(`Site is running at http://localhost:${port}`);

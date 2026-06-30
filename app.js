@@ -331,10 +331,24 @@ class AppState {
             if (res.ok) {
                 const data = await res.json();
                 this.cursorSkillRegistry = Array.isArray(data.skills) ? data.skills : [];
+                return;
             }
         } catch (e) {
-            console.warn('Could not load cursor skill registry:', e);
+            console.warn('Could not load cursor skill registry from API:', e);
         }
+
+        try {
+            const res = await fetch('/skills/registry.json');
+            if (res.ok) {
+                const data = await res.json();
+                this.cursorSkillRegistry = Array.isArray(data.skills) ? data.skills : [];
+                return;
+            }
+        } catch (e) {
+            console.warn('Could not load cursor skill registry snapshot:', e);
+        }
+
+        this.cursorSkillRegistry = [];
     }
 
     async loadQueue() {
@@ -2071,40 +2085,78 @@ class AppState {
         const container = document.getElementById('skills-grid-container');
         container.innerHTML = '';
 
-        if (this.cursorSkillRegistry.length > 0) {
-            const cursorSection = document.createElement('div');
-            cursorSection.className = 'skills-section';
-            cursorSection.innerHTML = `
-                <h3 class="section-header">Cursor Agent Skills</h3>
-                <p class="text-muted skills-section-desc">From <code>.cursor/skills/</code> — copy an invocation and paste into Cursor chat.</p>
-            `;
-            const cursorGrid = document.createElement('div');
-            cursorGrid.className = 'skills-grid-inner';
+        const projectSkills = this.cursorSkillRegistry.filter(s => s.scope !== 'user');
+        const userSkills = this.cursorSkillRegistry.filter(s => s.scope === 'user');
 
-            this.cursorSkillRegistry.forEach(skill => {
+        const renderCursorSkillSection = (title, desc, skills) => {
+            if (!skills.length) return null;
+
+            const section = document.createElement('div');
+            section.className = 'skills-section';
+            section.innerHTML = `
+                <h3 class="section-header">${title}</h3>
+                <p class="text-muted skills-section-desc">${desc}</p>
+            `;
+            const grid = document.createElement('div');
+            grid.className = 'skills-grid-inner';
+
+            skills.forEach(skill => {
                 const card = document.createElement('div');
                 card.className = 'agent-card skill-invoke-card';
+                const scopeBadge = skill.scope === 'user'
+                    ? '<span class="skill-scope-badge user">User</span>'
+                    : '<span class="skill-scope-badge project">Project</span>';
                 card.innerHTML = `
                     <div class="agent-card-header">
                         <div class="agent-title-group">
                             <h3 class="agent-card-title">${skill.name}</h3>
                         </div>
-                        ${skill.invoke_only ? '<span class="agent-status-badge idle">Invoke only</span>' : ''}
+                        <div class="skill-card-badges">
+                            ${scopeBadge}
+                            ${skill.invoke_only ? '<span class="agent-status-badge idle">Invoke only</span>' : ''}
+                        </div>
                     </div>
                     <p class="agent-card-desc">${skill.description || 'No description'}</p>
                     <div class="agent-card-footer">
-                        <span class="agent-model-tag">${skill.id}</span>
+                        <span class="agent-model-tag" title="${skill.path || ''}">${skill.id}</span>
                         <button class="btn btn-secondary btn-copy-skill-invocation" data-skill-id="${skill.id}">Copy invocation</button>
                     </div>
                 `;
                 card.querySelector('.btn-copy-skill-invocation').addEventListener('click', () => {
                     this.copySkillInvocation(skill.id);
                 });
-                cursorGrid.appendChild(card);
+                grid.appendChild(card);
             });
 
-            cursorSection.appendChild(cursorGrid);
-            container.appendChild(cursorSection);
+            section.appendChild(grid);
+            return section;
+        };
+
+        if (this.cursorSkillRegistry.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'skills-section';
+            empty.innerHTML = `
+                <h3 class="section-header">Cursor Agent Skills</h3>
+                <p class="text-muted skills-section-desc">
+                    No skills loaded. Run <code>npm start</code> and open this app from
+                    <code>http://localhost:3000</code>, or run <code>npm run sync-skills</code> to refresh
+                    <code>skills/registry.json</code>.
+                </p>
+            `;
+            container.appendChild(empty);
+        } else {
+            const projectSection = renderCursorSkillSection(
+                'Project Skills',
+                'From <code>.cursor/skills/</code> in this repo — copy an invocation and paste into Cursor chat.',
+                projectSkills
+            );
+            const userSection = renderCursorSkillSection(
+                'User Skills',
+                'From <code>~/.cursor/skills/</code> — available across all workspaces.',
+                userSkills
+            );
+            if (projectSection) container.appendChild(projectSection);
+            if (userSection) container.appendChild(userSection);
         }
 
         const knowledgeSection = document.createElement('div');

@@ -54,6 +54,21 @@
       "skills": ["pain-points", "project-memory"],
       "mcp_tools": [],
       "invocation": "Run pain-points-resolver for project cortex"
+    },
+    {
+      "id": "ideas-trends-scout",
+      "name": "Ideas & Trends Scout",
+      "description": "Weekly and monthly horizon scan for ideas, tools, and trends; writes research and queues sparks for validation.",
+      "model_tier": "mid",
+      "trigger": "schedule",
+      "schedule": {
+        "weekly": "Monday 08:00 — Run ideas-trends-scout weekly scan",
+        "monthly": "First Monday 08:00 — Run ideas-trends-scout monthly digest"
+      },
+      "output_schema": "trends-digest",
+      "skills": ["ideas-trends", "presentation-hook", "project-memory"],
+      "mcp_tools": ["web"],
+      "invocation": "Run ideas-trends-scout weekly scan"
     }
   ]
 }

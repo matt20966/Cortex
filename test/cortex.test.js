@@ -115,6 +115,20 @@ describe('dev-server API', () => {
     const dailyCompact = res.body.skills.find((s) => s.id === 'daily-compact');
     assert.ok(dailyCompact, 'daily-compact skill should be listed');
     assert.ok(dailyCompact.invocation.includes('daily-compact'));
+    assert.ok(dailyCompact.description.length > 0, 'daily-compact description should parse from frontmatter');
+    const ideasTrends = res.body.skills.find((s) => s.id === 'ideas-trends');
+    assert.ok(ideasTrends, 'ideas-trends skill should be listed');
+    assert.ok(ideasTrends.description.includes('horizon scan'), 'ideas-trends description should parse');
+    const presentationHook = res.body.skills.find((s) => s.id === 'presentation-hook');
+    assert.ok(presentationHook, 'user presentation-hook skill should be listed');
+    assert.equal(presentationHook.scope, 'user');
+  });
+
+  it('GET /skills/registry.json serves static snapshot', async () => {
+    const res = await request(port, 'GET', '/skills/registry.json');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.skills));
+    assert.ok(res.body.skills.length >= 7);
   });
 
   it('POST /api/inbox routes idea: prefix', async () => {

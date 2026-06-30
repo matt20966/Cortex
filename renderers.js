@@ -50,6 +50,39 @@ const CortexRenderers = {
     return html;
   },
 
+  'trends-digest'(data) {
+    let html = `<div class="agent-output-card trends-digest">
+      <div class="agent-output-header">
+        <span class="verdict-badge">${escapeHtml(data.cadence || '')}</span>
+        <span class="text-muted">${escapeHtml(data.period || '')}</span>
+      </div>
+      <p class="digest-focus"><strong>${escapeHtml(data.headline || '')}</strong></p>`;
+
+    if (data.trends?.length) {
+      html += '<div class="output-section"><strong>Trends</strong><ul>';
+      data.trends.forEach((t) => {
+        html += `<li><strong>${escapeHtml(t.title)}</strong> — ${escapeHtml(t.signal)}`;
+        if (t.source) html += ` <a href="${escapeHtml(t.source)}" target="_blank" rel="noopener">source</a>`;
+        html += '</li>';
+      });
+      html += '</ul></div>';
+    }
+
+    if (data.opportunities?.length) {
+      html += '<div class="output-section"><strong>Opportunities</strong><ul>';
+      data.opportunities.forEach((o) => {
+        html += `<li><strong>${escapeHtml(o.title)}</strong> (${escapeHtml(o.suggested_action)}) — ${escapeHtml(o.why_now)}</li>`;
+      });
+      html += '</ul></div>';
+    }
+
+    if (data.recommendation) {
+      html += `<div class="output-section"><strong>Next step</strong><p>${escapeHtml(data.recommendation)}</p></div>`;
+    }
+    html += '</div>';
+    return html;
+  },
+
   'clarification-blocked'(data) {
     let html = `<div class="agent-output-card clarification-blocked">
       <p><strong>Blocked — ${data.questions.length} question(s) need answers:</strong></p><ol>`;

@@ -1,0 +1,15 @@
+{
+  "target": "Produces sourced weekly or monthly trends digest with memory persistence",
+  "failure_modes": [
+    { "id": "unsourced-trend", "heuristic": "trend entry missing source URL" },
+    { "id": "generic-noise", "heuristic": "trends not tied to project context" },
+    { "id": "duplicate-research", "heuristic": "rewrites existing research without new signal" }
+  ],
+  "rubric": [
+    "headline_is_one_line",
+    "trends_sourced_and_relevant",
+    "research_persisted_with_ids",
+    "opportunities_actionable",
+    "monthly_includes_stale_watch"
+  ]
+}

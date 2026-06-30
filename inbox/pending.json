@@ -1,10 +1,40 @@
 {
   "items": [
     {
+      "id": "inbox-1782841796186",
+      "content": "test routing 1782841796183",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T17:49:56.186Z",
+      "processed_at": null
+    },
+    {
+      "id": "inbox-1782841766865",
+      "content": "test routing 1782841766861",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T17:49:26.865Z",
+      "processed_at": null
+    },
+    {
+      "id": "inbox-1782841630034",
+      "content": "test routing 1782841630031",
+      "status": "pending",
+      "route": "idea",
+      "target_agent": "idea-creator-validator",
+      "created_at": "2026-06-30T17:47:10.034Z",
+      "processed_at": null
+    },
+    {
       "id": "inbox-1782841423805",
       "content": "Agent building idea: Have agents communicate to each other via json",
       "status": "pending",
-      "created_at": "2026-06-30T17:43:43.806Z"
+      "route": null,
+      "target_agent": null,
+      "created_at": "2026-06-30T17:43:43.806Z",
+      "processed_at": null
     },
     {
       "id": "inbox-1782841408894",

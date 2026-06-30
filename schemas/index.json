@@ -27,6 +27,12 @@
       "file": "agent-outputs/clarification-blocked.json",
       "description": "clarification-protocol blocked output",
       "renderer": "clarification-blocked"
+    },
+    {
+      "id": "trends-digest",
+      "file": "agent-outputs/trends-digest.json",
+      "description": "ideas-trends-scout output contract",
+      "renderer": "trends-digest"
     }
   ]
 }

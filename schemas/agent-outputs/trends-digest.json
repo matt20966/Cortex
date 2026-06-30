@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cortex.local/schemas/agent-outputs/trends-digest.json",
+  "type": "object",
+  "required": ["cadence", "period", "headline", "trends", "opportunities", "recommendation"],
+  "additionalProperties": true,
+  "properties": {
+    "cadence": { "type": "string", "enum": ["weekly", "monthly"] },
+    "period": { "type": "string", "minLength": 1 },
+    "headline": { "type": "string", "minLength": 1 },
+    "trends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "signal", "relevance", "confidence", "source"],
+        "properties": {
+          "title": { "type": "string" },
+          "signal": { "type": "string" },
+          "relevance": { "type": "string" },
+          "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+          "source": { "type": "string" }
+        }
+      }
+    },
+    "opportunities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "why_now", "suggested_action"],
+        "properties": {
+          "title": { "type": "string" },
+          "why_now": { "type": "string" },
+          "suggested_action": { "type": "string", "enum": ["validate", "capture", "ignore"] },
+          "related_idea_id": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "stale_watch": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["research_id", "note"],
+        "properties": {
+          "research_id": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "research_written": { "type": "array", "items": { "type": "string" } },
+    "ideas_queued": { "type": "number" },
+    "recommendation": { "type": "string", "minLength": 1 }
+  }
+}

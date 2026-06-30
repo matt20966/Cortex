@@ -1,0 +1,77 @@
+{
+  "skills": [
+    {
+      "id": "agent-directory",
+      "name": "Agent Directory",
+      "description": "Audit agent registry for overlap; gate new agent creation. Maintenance mode reports duplicates; creation mode recommends extend vs new vs skill extraction.",
+      "invocation": "Apply the **agent-directory** skill",
+      "path": ".cursor/skills/agent-directory/SKILL.md",
+      "scope": "project",
+      "invoke_only": false
+    },
+    {
+      "id": "clarification-protocol",
+      "name": "Clarification Protocol",
+      "description": "Batch clarifying questions upfront when blocked on ambiguous input. Returns structured JSON with questions and explicit assumptions. Use before proceeding when critical information is missing.",
+      "invocation": "Apply the **clarification-protocol** skill",
+      "path": ".cursor/skills/clarification-protocol/SKILL.md",
+      "scope": "project",
+      "invoke_only": false
+    },
+    {
+      "id": "daily-compact",
+      "name": "Daily Compact",
+      "description": "Compacts and organises daily brain dumps — daily notes, tasks, and inbox captures. Removes or archives stale completed and overdue tasks. Use when the user invokes daily compact, asks to compact their brain dump, tidy daily notes, or prune old tasks.",
+      "invocation": "Apply the **daily-compact** skill",
+      "path": ".cursor/skills/daily-compact/SKILL.md",
+      "scope": "project",
+      "invoke_only": true
+    },
+    {
+      "id": "github-commit",
+      "name": "Github Commit",
+      "description": "Auto-commit at natural checkpoints with conventional commit messages. Gates agent and skill instruction changes behind a required human explanation and changelog entry. Use when a feature reaches working state, tests pass, refactor completes, or scaffold is laid down.",
+      "invocation": "Apply the **github-commit** skill",
+      "path": ".cursor/skills/github-commit/SKILL.md",
+      "scope": "project",
+      "invoke_only": false
+    },
+    {
+      "id": "ideas-trends",
+      "name": "Ideas Trends",
+      "description": "Proactive horizon scan for ideas, tools, and trends relevant to Matt's active projects and interests. Writes research to project memory; queues promising sparks to inbox. Use on weekly or monthly schedule, or when asked to scan for trends.",
+      "invocation": "Apply the **ideas-trends** skill",
+      "path": ".cursor/skills/ideas-trends/SKILL.md",
+      "scope": "project",
+      "invoke_only": false
+    },
+    {
+      "id": "pain-points",
+      "name": "Pain Points",
+      "description": "Track and research open project blockers. Pull pain points from memory, return fix briefs per hurdle. Use on schedule or when resolving blockers.",
+      "invocation": "Apply the **pain-points** skill",
+      "path": ".cursor/skills/pain-points/SKILL.md",
+      "scope": "project",
+      "invoke_only": false
+    },
+    {
+      "id": "project-memory",
+      "name": "Project Memory",
+      "description": "Read and write git-tracked project memory at .memory/project.json. Use before acting on any Cortex project and after meaningful changes (ideas, decisions, pain points, research).",
+      "invocation": "Apply the **project-memory** skill",
+      "path": ".cursor/skills/project-memory/SKILL.md",
+      "scope": "project",
+      "invoke_only": false
+    },
+    {
+      "id": "presentation-hook",
+      "name": "Presentation Hook",
+      "description": "Behavioural contract for how agents communicate with Matt — clarifying questions, plan structure, and output style. Apply to every agent interaction in the Cortex system.",
+      "invocation": "Apply the **presentation-hook** skill",
+      "path": "~/.cursor/skills/presentation-hook/SKILL.md",
+      "scope": "user",
+      "invoke_only": false
+    }
+  ],
+  "updated_at": "2026-06-30T17:49:56.160Z"
+}

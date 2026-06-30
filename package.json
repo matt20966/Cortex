@@ -9,6 +9,7 @@
     "signoff": "node .cursor/hooks/daily-signoff.js",
     "digest": "node scripts/morning-digest.js",
     "compact": "node scripts/memory-compaction.js",
+    "sync-skills": "node scripts/sync-skills-registry.js",
     "improve": "node scripts/self-improvement-review.js",
     "notify": "node scripts/telegram-notify.js"
   },

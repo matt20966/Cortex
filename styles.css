@@ -1313,6 +1313,33 @@ body {
     gap: 1.25rem;
 }
 
+.skill-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.skill-scope-badge {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+}
+
+.skill-scope-badge.project {
+    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.skill-scope-badge.user {
+    color: var(--text-muted);
+    background: var(--bg-subtle, rgba(0, 0, 0, 0.04));
+}
+
 .project-card, .skill-card, .agent-card {
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);
